@@ -89,10 +89,10 @@ do {
       }
     }
     push: {
-      password: {
+      password: [{
         shell: "nu -c"
         command: "open secrets.json | get 'password'"
-      }
+      }]
     }
   } | save -f carbon.toml
 

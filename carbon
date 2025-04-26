@@ -335,7 +335,8 @@ def find_expression [
   expressions
   name: string
 ] {
-  let expressions = if ($expressions | describe) == "list" { $expressions } else { [$expressions] }
+  let is_array = ($expressions | describe | str starts-with "table") or ($expressions | describe | str starts-with "list")
+  let expressions = if $is_array { $expressions } else { [$expressions] }
 
   let matched = $expressions | where {|expression|
     let registry_pattern = $expression | get registry_pattern? | default "^"
