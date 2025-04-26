@@ -1,5 +1,5 @@
 {
-  description = "Carbon ";
+  description = "carbon";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -19,5 +19,32 @@
         pkgs.nushell
       ];
     });
+
+    packages = lib.genAttrs linuxSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in
+      {
+        carbon = let
+          carbonScript = pkgs.stdenv.mkDerivation {
+            name = "carbon-script";
+            src = ./carbon;
+
+            phases = [ "installPhase" ];
+
+            installPhase = ''
+              mkdir -p $out/bin
+              cp $src $out/bin/carbon
+              chmod +x $out/bin/carbon
+            '';
+          };
+        in pkgs.writeScriptBin "carbon" ''
+          #!${pkgs.bash}/bin/bash
+
+          export PATH="${pkgs.sops}/bin:${pkgs.rage}/bin:$PATH"
+
+          exec ${pkgs.nushell}/bin/nu ${carbonScript}/bin/carbon "$@"
+        '';
+      }
+    );
   };
 }

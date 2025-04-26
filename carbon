@@ -1,25 +1,43 @@
-#!/home/taylor1791/src/nushell/target/release/nu
+#!/usr/bin/env nu
 
 use std/log
 
 let name = "carbon"
 let version = "0.0.1"
-let git_root = git rev-parse --show-toplevel # | complete
+let git_root = git rev-parse --show-toplevel
 let config_dir_name = $".($name)"
 let service_config_name = $"($name).toml"
 let relative_private_key = ($config_dir_name | path join "private-key.age")
 let private_key_file = ($git_root | path join $relative_private_key)
 
-# Secrets managements for monorepo-based service-oriented architectures.
-def main [] {
+# Encrypted local configuration for monorepo-based service-oriented architectures.
+#
+# Services in a monorepo expose configuration to other services and consume
+# configuration from other services. When using carbon a service code-ifys this in a
+# carbon.toml file. All of the published configuration is encrypted and stored in a
+# registry. Registries are stored in the monorepo and use envelope encrypted to allow
+# specific users to decrypt a registry. Registries are named and isolated to facilitate
+# different environment.
+#
+# Note: This is a work in progress and should not be used in production. E.g., a
+# production ready system would have service-level access controls. This is not
+# implemented yet.
+def main []: nothing -> nothing {
   help main
 }
 
-# Initializes secrets management for a service
+# Bootstraps registries and initializes services.
+#
+# Performs the following actions:
+#  1. Creates a private key for the user if one does not exist.
+#  2. Ensures that private key are ignored by git.
+#  3. Creates the specified registries and adds the user's public key to the registry if
+#     they do not exist.
+#  4. Creates a carbon.toml file for the service if one does not exist.
 def "main init" [
-  service: string
-  --namespace (-n): list<string> = [""]
-] {
+  service: string # The path of the service to initialize relative to the git root.
+  --registries (-n): list<string> = [""] # Initializes these registries if necessary.
+]: nothing -> nothing {
   let service_path = ($git_root | path join $service)
 
   let ignore = ($git_root | path join .gitignore)
@@ -33,10 +51,10 @@ def "main init" [
     $"\n($ignore_content)" | save $ignore --append
   }
 
-  main request --namespace $namespace --only-if-created
+  main request --registries $registries --only-if-created
 
-  for $ns in $namespace {
-    read_sops_config $ns
+  for $r in $registries {
+    read_sops_config $r
   }
 
   if not ($service_path | path exists) {
@@ -50,6 +68,14 @@ def "main init" [
     log debug $"Creating ($service_config_name)"
     {
       name: $service
+      registry: {
+        use: {
+          command: "echo {{registry}} >> .carbon-registry"
+        }
+        current: {
+          command: "cat .carbon-registry"
+        }
+      }
       pull: {
         password: {
           service: $service
@@ -67,19 +93,25 @@ def "main init" [
   }
 }
 
-# Pushes secrets to the registry.
+# Pushes a service's exposed configuration to the registry.
+#
+# Reads the service's `push` attribute, encrypts the configuration, and writes it to the
+# current registry. Only available to users who have access to the registry.
+#
+# If no service is provided, the closest ancestor service will be used. Provided
+# services are relative to the git root.
 def "main push" [
-  service?: string # The path of the service from which to publish secrets.
-] {
+  service?: string # Path to the service that will push its configuration to the registry.
+]: nothing -> nothing {
   let working_dir = read_working_dir $service
   let service_config = open ($working_dir | path join $service_config_name)
-  let namespace = read_namespace $service_config $working_dir
-  let sops = read_sops_config $namespace
+  let registry = read_registry $service_config $working_dir
+  let sops = read_sops_config $registry
 
   let service_name = $service_config | get name | to json --raw
   let publish = $service_config | get push? | default {}
   for secret_name in ($publish | columns) {
-    let expression = find_expression $namespace ($publish | get $secret_name) $secret_name
+    let expression = find_expression $registry ($publish | get $secret_name) $secret_name
     let secret = resolve $expression $working_dir | to json --raw
     log debug $"Publishing secret ($secret_name) with value: ($secret)"
 
@@ -92,14 +124,22 @@ def "main push" [
   }
 }
 
-# Pull secrets from the registry.
+# Pulls a service's configuration from the registry.
+#
+# Read the service's `pull` attribute, decrypts the configuration from the current
+# registry, and writes it to the service's `file` attribute. The `file` attribute
+# defaults to `.environment.json` if not specified. Only available to users who have
+# access to the registry.
+#
+# If no service is provided, the closest ancestor service will be used. Provided
+# services are relative to the git root.
 def "main pull" [
-  service?: string # The path of the service from which to pull secrets.
-] {
+  service?: string # Path to the service that will pull its configuration from the registry.
+]: nothing -> nothing {
   let working_dir = read_working_dir $service
   let service_config = open ($working_dir | path join $service_config_name)
-  let namespace = read_namespace $service_config $working_dir
-  let sops = read_sops_config $namespace
+  let registry = read_registry $service_config $working_dir
+  let sops = read_sops_config $registry
 
   mut contents = {}
   for local_name in ($service_config | get pull? | default {} | columns) {
@@ -133,32 +173,41 @@ def "main pull" [
   $contents | save -f $file_path
 }
 
-# Changes the namespace of a service.
+# Changes the registry used by a service.
+#
+# Calls the commands specified in the service's `registry.use` attribute.
+#
+# If no service is provided, the closest ancestor service will be used. Provided
+# services are relative to the git root.
 def "main use" [
-  namespace: string
-  service?: string
-] {
+  registry: string
+  service?: string # Path to the service that should use the provided registry.
+]: nothing -> nothing {
   let working_dir = read_working_dir $service
   let service_config = open ($working_dir | path join $service_config_name)
 
-  if not ('use' in ($service_config | get namespace? | default {})) {
+  if not ('use' in ($service_config | get registry? | default {})) {
     error make -u {
-      msg: $"The service ("FIXME") does not support changing namespaces."
+      msg: $"The service ("FIXME") does not support changing registry."
     }
   }
 
   let variables = {
-    namespace: $namespace
+    registry: $registry
   }
 
-  execute ($service_config | get namespace.use) $working_dir $variables
+  execute ($service_config | get registry.use) $working_dir $variables
 }
 
-# Generates a private key and adds it to the recipients list.
+# Request access to a registry.
+#
+# Adds the user's public key to the registry for the provided registries, but does not
+# allow the user to decrypt the registry. The user must be granted access by another
+# user who has access to the registry by running the `rekey` command.
 def "main request" [
-  --namespace (-n): list<string> = [""]
+  --registries (-r): list<string> = [""] # The registries of which to request access.
   --only-if-created # Only add the user's key if the config file was created.
-] {
+]: nothing -> nothing {
   if not ($config_dir_name | path exists) {
     log debug "Creating config directory..."
     mkdir $config_dir_name
@@ -171,8 +220,8 @@ def "main request" [
 
   let public_key = rage-keygen -y $private_key_file
   let name = if 'USER' in $env { $env.USER } else { "Enter your name" }
-  for $ns in $namespace {
-    let sops_config_file = ($git_root | config_path "sops.yaml" --namespace $ns)
+  for $r in $registries {
+    let sops_config_file = ($git_root | config_path "sops.yaml" --registry $r)
     let create_config = not ($sops_config_file | path exists)
 
     if $create_config {
@@ -205,12 +254,18 @@ def "main request" [
   }
 }
 
-# Accepts pending access changes and rotates the registry key if any users were removed.
+# Applies pending access changes.
+#
+# Re-encrypts the registry's encryption key with any new user's public key thereby
+# allowing them to decrypt the registry. It also removes any users who no longer
+# have access to the registry and then rotates the registry key (only if any users
+# were removed). Registries can only be updated by another user who has already been
+# granted access.
 def "main rekey" [
-  --namespace (-n): list<string> = [""]
-] {
-  for ns in $namespace {
-    let sops = read_sops_config $ns
+  --registries (-r): list<string> = [""] # The registries which to rekey.
+]: nothing -> nothing {
+  for r in $registries {
+    let sops = read_sops_config $r
 
     with-env {
       SOPS_AGE_KEY_FILE: $private_key_file
@@ -244,28 +299,28 @@ def read_working_dir [
   $config_path | path dirname
 }
 
-def read_namespace [
+def read_registry [
   service_config: record
   working_dir: path
 ] {
-  let service_namespace = $service_config | get namespace? | default {}
+  let service_registry = $service_config | get registry? | default {}
 
-  if not ('current' in $service_namespace) {
-    log debug "Using default namespace since service has no namespace.current."
+  if not ('current' in $service_registry) {
+    log debug "Using default registry since service has no registry.current."
     return ""
   }
 
-  let value = resolve $service_namespace.current $working_dir
-  log debug $"Using value from namespace.current: ($value)"
+  let value = resolve $service_registry.current $working_dir
+  log debug $"Using value from registry.current: ($value)"
 
   return $value
 }
 
 def read_sops_config [
-  namespace: string
+  registry: string
 ] {
-  let registry_path = config_path "registry.yaml" --namespace $namespace
-  let sops_config_path = ($git_root | config_path "sops.yaml" --namespace $namespace)
+  let registry_path = config_path "registry.yaml" --registry $registry
+  let sops_config_path = ($git_root | config_path "sops.yaml" --registry $registry)
   if not ($registry_path | path exists) {
     log debug $"Creating registry file ($registry_path)"
     { $"_($name)": { version: $version } } | save $registry_path
@@ -276,25 +331,25 @@ def read_sops_config [
 }
 
 def find_expression [
-  namespace: string
+  registry: string
   expressions
   name: string
 ] {
   let expressions = if ($expressions | describe) == "list" { $expressions } else { [$expressions] }
 
   let matched = $expressions | where {|expression|
-    let namespace_pattern = $expression | get namespace_pattern? | default "^"
+    let registry_pattern = $expression | get registry_pattern? | default "^"
 
-    $namespace =~ $namespace_pattern
+    $registry =~ $registry_pattern
   }
 
   match ($matched | length) {
     0 => (error make -u {
-      msg: $"No matching namespace patterns for attribute ($name) in namespace ($namespace)."
+      msg: $"No matching registry patterns for attribute ($name) in registry ($registry)."
     }),
     1 => ($matched | first),
     _ => (error make -u {
-      msg: "Multiple matching namespace patterns for attribute ($name) in namespace ($namespace)."
+      msg: "Multiple matching registry patterns for attribute ($name) in registry ($registry)."
     })
   }
 }
@@ -361,12 +416,12 @@ def execute [
 
 def config_path [
   filename: string
-  --namespace: string = ""
+  --registry: string = ""
 ] {
   let file = $filename | path parse
 
-  let suffix = if $namespace != "" {
-    $".($namespace)"
+  let suffix = if $registry != "" {
+    $".($registry)"
   } else {
     ""
   }

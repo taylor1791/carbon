@@ -16,8 +16,8 @@ assert (".carbon/registry.yaml" | path exists)
 assert (".carbon/service-1/carbon.toml" | path exists)
 mv .carbon/private-key.age .carbon/private-key.age.user1
 
-# Test the init command with a namespace
-USER=user2 ./carbon init .carbon/service-2 --namespace '[dev,prd]'
+# Test the init command with a registry
+USER=user2 ./carbon init .carbon/service-2 --registries '[dev,prd]'
 assert ("./.carbon/registry.dev.yaml" | path exists)
 assert ("./.carbon/registry.prd.yaml" | path exists)
 assert ("./.carbon/sops.dev.yaml" | path exists)
@@ -64,25 +64,25 @@ open .carbon/service-3/.environment.json | get base_url
 ./carbon push .carbon/service-3
 open .carbon/registry.yaml | get service-with-dependencies.password
 
-# Test namespaces using the push, pull, and use commands.
+# Test registries using the push, pull, and use commands.
 as_user "user2"
 do {
   cd .carbon/service-2
 
   {
-    name: "service-with-namespace"
+    name: "service-with-registry"
     file: "secrets.json"
-    namespace: {
+    registry: {
       use: {
-        command: "echo {{namespace}} > NAMESPACE"
+        command: "echo {{registry}} > REGISTRY"
       }
       current: {
-        command: "cat NAMESPACE"
+        command: "cat REGISTRY"
       }
     }
     pull: {
       password: {
-        service: "service-with-namespace"
+        service: "service-with-registry"
         default: {
           command: "cat /dev/random | tr -dc 'A-Za-z0-9' | head -c 20"
         }
@@ -97,11 +97,11 @@ do {
   } | save -f carbon.toml
 
   ../../carbon use dev
-  assert ("dev" == (open NAMESPACE | str trim))
+  assert ("dev" == (open REGISTRY | str trim))
   ../../carbon pull
   open secrets.json | get password
   ../../carbon push
-  open ../registry.dev.yaml | get service-with-namespace.password
+  open ../registry.dev.yaml | get service-with-registry.password
 }
 
 # Test adding a user
