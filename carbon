@@ -112,7 +112,7 @@ def "main push" [
   let publish = $service_config | get push? | default {}
   for secret_name in ($publish | columns) {
     let expression = find_expression $registry ($publish | get $secret_name) $secret_name
-    let secret = resolve $expression $working_dir | to json --raw
+    let secret = resolve $expression $working_dir {} | to json --raw
     log debug $"Publishing secret ($secret_name) with value: ($secret)"
 
     with-env {
@@ -155,8 +155,13 @@ def "main pull" [
 
       match [$result.exit_code, $result.stderr] {
         [0, _] => $result.stdout,
-        [_, $err] if $err =~ "component \\[.*\\] not found" and 'default' in $definition =>
-          (resolve ($definition | get default) $working_dir),
+        [_, $err] if $err =~ "component \\[.*\\] not found" and 'default' in $definition => {
+          let variables = {
+            registry: $registry
+          };
+
+          resolve ($definition | get default) $working_dir $variables
+        },
         [_, _] => (error make -u {
           msg: $"The ($service_name) service has not published ($remote_name)"
         }),
@@ -334,7 +339,7 @@ def read_registry [
     return ""
   }
 
-  let value = resolve $service_registry.current $working_dir
+  let value = resolve $service_registry.current $working_dir {}
   log debug $"Using value from registry.current: ($value)"
 
   return $value
@@ -387,7 +392,7 @@ def find_expression [
 def resolve [
   record: record
   working_dir: path
-  variables: record = {}
+  variables: record
 ] {
   if 'value' in $record {
     return $record.value
@@ -408,7 +413,7 @@ def run [
     command: string
   >
   working_dir: path
-  variables: record = {}
+  variables: record
 ] {
   let output = execute $exec $working_dir $variables
 
@@ -426,7 +431,7 @@ def execute [
     command: string
   >
   working_dir: path
-  variables: record = {}
+  variables: record
 ] {
   let shell = $exec | get shell? | default "sh -c"
   let template_command = $exec.command
