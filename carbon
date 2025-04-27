@@ -395,7 +395,7 @@ def resolve [
   variables: record
 ] {
   if 'value' in $record {
-    return $record.value
+    return (template $record.value $variables)
   }
 
   if 'command' in $record {
@@ -434,11 +434,8 @@ def execute [
   variables: record
 ] {
   let shell = $exec | get shell? | default "sh -c"
-  let template_command = $exec.command
+  let command = template $exec.command $variables
 
-  let command = $variables | columns | reduce -f $template_command {|key, command|
-    $command | str replace --all $"{{($key)}}" ($variables | get $key | into string)
-  }
   log debug $"Executing command `($command)` with shell ($shell) from ($working_dir)..."
   let shell_parts = $shell | split row " "
   let output = do -i {
@@ -462,6 +459,15 @@ def config_path [
   }
 
   $git_root | path join $config_dir_name | path join $"($file.stem)($suffix).($file.extension)"
+}
+
+def template [
+  template: string
+  variables: record
+] {
+  $variables | columns | reduce -f $template {|key, template|
+    $template | str replace --all $"{{($key)}}" ($variables | get $key | into string)
+  }
 }
 
 def find [
