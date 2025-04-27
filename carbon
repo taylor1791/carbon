@@ -285,6 +285,30 @@ def "main rekey" [
   }
 }
 
+# Views the registry.
+#
+# Decrypts and prints the registry. Only available to users who have access
+# to the registry. Defaults to the registry of the closest ancestor service.
+def "main view" [
+  --registry (-r): string
+]: nothing -> nothing {
+  let registry = if $registry == null {
+    let working_dir = read_working_dir
+    let service_config = open ($working_dir | path join $service_config_name)
+    read_registry $service_config $working_dir
+  } else {
+    $registry
+  }
+
+  let sops = read_sops_config $registry
+  with-env {
+    SOPS_AGE_KEY_FILE: $private_key_file
+  } {
+
+    sops --config $sops.config_path --decrypt $sops.registry_path
+  }
+}
+
 def read_working_dir [
   service?: string
 ] {
