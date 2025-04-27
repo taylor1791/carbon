@@ -338,15 +338,20 @@ def find_expression [
   let is_array = ($expressions | describe | str starts-with "table") or ($expressions | describe | str starts-with "list")
   let expressions = if $is_array { $expressions } else { [$expressions] }
 
-  let matched = $expressions | where {|expression|
-    let registry_pattern = $expression | get registry_pattern? | default "^"
-
-    $registry =~ $registry_pattern
-  }
+  let matched = $expressions
+    | where {|expression| 'registry_pattern' in $expression }
+    | where {|expression| $registry =~ ($expression | get registry_pattern) }
+  let defaults = $expressions | where {|expression| not ('registry_pattern' in $expression) }
 
   match ($matched | length) {
-    0 => (error make -u {
-      msg: $"No matching registry patterns for attribute ($name) in registry ($registry)."
+    0 => (match ($defaults | length) {
+      0 => (error make -u {
+        msg: $"No matching registry patterns for attribute ($name) in registry ($registry)."
+      }),
+      1 => ($defaults | first),
+      _ => (error make -u {
+        msg: $"Multiple default patterns for attribute ($name) in registry ($registry)."
+      })
     }),
     1 => ($matched | first),
     _ => (error make -u {
