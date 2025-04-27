@@ -350,7 +350,7 @@ def find_expression [
     }),
     1 => ($matched | first),
     _ => (error make -u {
-      msg: "Multiple matching registry patterns for attribute ($name) in registry ($registry)."
+      msg: "$Multiple matching registry patterns for attribute ($name) in registry ($registry)."
     })
   }
 }
