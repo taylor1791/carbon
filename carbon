@@ -33,13 +33,11 @@ def main []: nothing -> nothing {
 #  2. Ensures that private key are ignored by git.
 #  3. Creates the specified registries and adds the user's public key to the registry if
 #     they do not exist.
-#  4. Creates a carbon.toml file for the service if one does not exist.
+#  4. Creates a carbon.toml file for the service if provided and one does not exist.
 def "main init" [
-  service: string # The path of the service to initialize relative to the git root.
+  service?: string # The path of the service to initialize relative to the git root.
   --registries (-n): list<string> = [""] # Initializes these registries if necessary.
 ]: nothing -> nothing {
-  let service_path = ($git_root | path join $service)
-
   let ignore = ($git_root | path join .gitignore)
   if not ($ignore | path exists) {
     touch $ignore
@@ -57,6 +55,11 @@ def "main init" [
     read_sops_config $r
   }
 
+  if $service == null {
+    log debug "No service provided. Skipping service initialization."
+    return
+  }
+  let service_path = ($git_root | path join $service)
   if not ($service_path | path exists) {
     log debug "Creating service directory..."
     mkdir $service_path
