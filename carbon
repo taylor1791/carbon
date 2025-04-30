@@ -314,6 +314,27 @@ def "main view" [
   }
 }
 
+# Read a single value from the registry.
+#
+# Decrypts and prints a single secret from the registry. Only available to users who
+# have access to the registry.
+def "main read" [
+  service: string
+  name: string
+  --registry (-r): string
+]: nothing -> nothing {
+  let registry = $registry | default "";
+  let sops = read_sops_config $registry
+  let service_name = $service  | to json
+  let remote_name = $name | to json
+  let secret = $'[($service_name)][($remote_name)]'
+  with-env {
+    SOPS_AGE_KEY_FILE: $private_key_file
+  } {
+    sops --config $sops.config_path --decrypt --extract $secret $sops.registry_path
+  }
+}
+
 def read_working_dir [
   service?: string
 ] {

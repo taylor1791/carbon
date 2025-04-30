@@ -14,6 +14,7 @@ assert (".carbon/private-key.age" | path exists)
 assert (1 == (open .carbon/sops.yaml | get users | length))
 assert (".carbon/registry.yaml" | path exists)
 assert (".carbon/service-1/carbon.toml" | path exists)
+assert ((./carbon read _carbon version | str trim) == "0.0.1")
 mv .carbon/private-key.age .carbon/private-key.age.user1
 
 # Test the init command with a registry
