@@ -36,7 +36,7 @@ def main []: nothing -> nothing {
 #  4. Creates a carbon.toml file for the service if provided and one does not exist.
 def "main init" [
   service?: string # The path of the service to initialize relative to the git root.
-  --registries (-n): list<string> = [""] # Initializes these registries if necessary.
+  --registries (-r): list<string> = [""] # Initializes these registries if necessary.
 ]: nothing -> nothing {
   let ignore = ($git_root | path join .gitignore)
   if not ($ignore | path exists) {
