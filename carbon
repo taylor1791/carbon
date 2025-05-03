@@ -119,7 +119,7 @@ def "main push" [
     log debug $"Publishing secret ($secret_name) with value: ($secret)"
 
     with-env {
-      SOPS_AGE_KEY_FILE: $private_key_file 
+      SOPS_AGE_KEY_FILE: $private_key_file
     } {
       let set_value = $'[($service_name)][($secret_name | to json --raw)] ($secret)'
       sops --config $sops.config_path --set $set_value -i $sops.registry_path
@@ -152,7 +152,7 @@ def "main pull" [
     let secret = $'[($service_name)][($remote_name)]'
 
     let value = with-env {
-      SOPS_AGE_KEY_FILE: $private_key_file 
+      SOPS_AGE_KEY_FILE: $private_key_file
     } {
       let result = sops --config $sops.config_path --decrypt --extract $secret $sops.registry_path | complete
 
@@ -253,7 +253,7 @@ def "main request" [
 
       let updated_creation_rules = $sops_config.creation_rules
         | update $rule_index {|it| $it | update age $new_recipients }
-      let updated_config = $sops_config 
+      let updated_config = $sops_config
         | upsert creation_rules $updated_creation_rules
         | upsert users ($sops_config.users | append { name: $name, key: $public_key })
 

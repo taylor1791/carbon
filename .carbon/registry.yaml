@@ -1,0 +1,21 @@
+_carbon:
+    version: ENC[AES256_GCM,data:DJk5Fv4=,iv:noqrFH6tCdDZUncC9+Dz1Jy5Id4KapAlstlk9oB7R8k=,tag:2lIbI5jA29BI8qEitHtQ3A==,type:str]
+service-without-dependencies:
+    gateway: ENC[AES256_GCM,data:vrjGfNO7gb2kTf3G8dESe+cNpw==,iv:PB1qBQPlBF0xfdEgbpRCEAgDA1Wcs7gMFApU0QvPh0I=,tag:3jRFFZ8ghLvfax5cVqQrhw==,type:str]
+service-with-dependencies:
+    password: ENC[AES256_GCM,data:QS1e76wRCYI=,iv:yzyXNeTXv41RWmaLaASMTfy4Ob1PxAvliRcfd1ONVY0=,tag:7FbuaakRRxWj1LaIjFHs+A==,type:str]
+sops:
+    age:
+        - recipient: age1sty9cumk67g94qt7a9v6le6kryyvn62uswpzwudc948ntcfqgu4ss5hdk0
+          enc: |
+            -----BEGIN AGE ENCRYPTED FILE-----
+            YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpU0pVYzc4STVsTmxaSS9I
+            YWhuR2lNdG96S1Izbm9YNjRQSHlTTVpUZ3dvCkJJcUJBVHRBN1BWVU4xZWNCck9P
+            UllDZWNCc3h3WDhwY1U4VHdBdFlDY2cKLS0tIGU3VjJiT1NTOXc4bVZ4YU43ZWlC
+            dG1HQ21OUHJlZXk1U1hodmVvSnZrMTQK5QiXMWiFchSjjilYbIm+05HR8ioybADd
+            OMeLkO8TFxUVBtRwihyCTInRRw8DjP8tJykXx4518VC/YXuhLlppFA==
+            -----END AGE ENCRYPTED FILE-----
+    lastmodified: "2025-04-30T04:44:32Z"
+    mac: ENC[AES256_GCM,data:Bcikl/ov8VQZErTwWKWccTKKf5ncEvdAa5h0g3xdAYQU7GCo5Mfqs4dNGChFE94nrqZAjeXYR6Ma347OnnQDU4CVWkRUEGk8dFTW4nXr0JUIkUsHA7CnF68xHBL9uBrZsV+RlEI08XmY5jH0ztUswHv066bYnoTRSQWd5B45MPg=,iv:45oMBd5eqSrg0r88Mcp9i/FJJKxAfgKgoP6uKjESQDA=,tag:4uOFxCfwKOZKvtd4hn5yMQ==,type:str]
+    unencrypted_suffix: _unencrypted
+    version: 3.10.1
