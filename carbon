@@ -71,14 +71,6 @@ def "main init" [
     log debug $"Creating ($service_config_name)"
     {
       name: $service
-      registry: {
-        use: {
-          command: "echo {{registry}} >> .carbon-registry"
-        }
-        current: {
-          command: "cat .carbon-registry"
-        }
-      }
       pull: {
         password: {
           service: $service
