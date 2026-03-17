@@ -1,4 +1,4 @@
-#!/home/taylor1791/src/nushell/target/release/nu
+#!/usr/bin/env nu
 
 use std/assert
 
@@ -14,7 +14,7 @@ assert (".carbon/private-key.age" | path exists)
 assert (1 == (open .carbon/sops.yaml | get users | length))
 assert (".carbon/registry.yaml" | path exists)
 assert (".carbon/service-1/carbon.toml" | path exists)
-assert ((./carbon read _carbon version | str trim) == "0.0.1")
+assert ((./carbon read _carbon version | str trim) == "0.0.2")
 mv .carbon/private-key.age .carbon/private-key.age.user1
 
 # Test the init command with a registry
@@ -94,6 +94,9 @@ do {
         shell: "nu -c"
         command: "open secrets.json | get 'password'"
       }]
+      queue_url: {
+        value: "http://localhost/{{registry}}-jobs"
+      }
     }
   } | save -f carbon.toml
 
@@ -103,6 +106,7 @@ do {
   open secrets.json | get password
   ../../carbon push
   open ../registry.dev.yaml | get service-with-registry.password
+  assert ("http://localhost/dev-jobs" == (../../carbon read -r dev service-with-registry queue_url))
 }
 
 # Test adding a user

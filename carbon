@@ -3,7 +3,7 @@
 use std/log
 
 let name = "carbon"
-let version = "0.0.1"
+let version = "0.0.2"
 let git_root = git rev-parse --show-toplevel
 let config_dir_name = $".($name)"
 let service_config_name = $"($name).toml"
@@ -107,7 +107,7 @@ def "main push" [
   let publish = $service_config | get push? | default {}
   for secret_name in ($publish | columns) {
     let expression = find_expression $registry ($publish | get $secret_name) $secret_name
-    let secret = resolve $expression $working_dir {} | to json --raw
+    let secret = resolve $expression $working_dir { registry: $registry } | to json --raw
     log debug $"Publishing secret ($secret_name) with value: ($secret)"
 
     with-env {
