@@ -338,6 +338,7 @@ def "main check" []: nothing -> nothing {
 
   let results = [
     (check_duplicate_names $services)
+    (check_missing_service $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -576,6 +577,22 @@ def check_duplicate_names [services: list] {
       print $"(ansi red_bold)error(ansi reset): duplicate service name \"($name)\""
       for svc in $group {
         print $"  ($svc.path)"
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
+
+# Checks that every pull references a service that exists.
+def check_missing_service [services: list] {
+  mut errors = 0
+  let known = $services | each {|s| $s.name }
+  for svc in $services {
+    for pull in $svc.pulls {
+      if $pull.service not-in $known {
+        $errors = $errors + 1
+        print $"(ansi red_bold)error(ansi reset): missing service"
+        print $"  ($svc.path) pulls from \"($pull.service)\" which has no carbon.toml"
       }
     }
   }

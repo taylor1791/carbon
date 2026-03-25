@@ -157,3 +157,21 @@ let check_dup_output = $"($check_dup.stdout)($check_dup.stderr)"
 assert ($check_dup_output | str contains "duplicate service name") "should report duplicate"
 assert ($check_dup_output | str contains "service-without-dependencies") "should name the duplicate service"
 rm -rf .carbon/service-4
+
+# Test the check command - detects missing service
+{
+  name: "service-missing-dep"
+  pull: {
+    base_url: {
+      service: "nonexistent-service"
+      name: "gateway"
+    }
+  }
+  push: {}
+} | save -f .carbon/service-3/carbon.toml
+
+let check_missing = (./carbon check | complete)
+assert ($check_missing.exit_code == 1) "check should fail with missing service"
+let check_missing_output = $"($check_missing.stdout)($check_missing.stderr)"
+assert ($check_missing_output | str contains "missing service") "should report missing service"
+assert ($check_missing_output | str contains "nonexistent-service") "should name the missing service"
