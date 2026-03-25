@@ -337,9 +337,10 @@ def "main check" []: nothing -> nothing {
   let services = discover_services
 
   let results = [
+    (check_duplicate_names $services)
   ]
-  let errors = $results | each {|r| $r.errors } | append 0 | math sum
-  let warnings = $results | each {|r| $r.warnings } | append 0 | math sum
+  let errors = $results | each {|r| $r.errors } | math sum
+  let warnings = $results | each {|r| $r.warnings } | math sum
 
   if $errors > 0 {
     let summary = $"($errors) errors, ($warnings) warnings"
@@ -562,4 +563,21 @@ def discover_services [] {
       )
     }
   }
+}
+
+# Checks for duplicate service names across all carbon.toml files.
+def check_duplicate_names [services: list] {
+  mut errors = 0
+  let names = $services | group-by name
+  for name in ($names | columns) {
+    let group = $names | get $name
+    if ($group | length) > 1 {
+      $errors = $errors + 1
+      print $"(ansi red_bold)error(ansi reset): duplicate service name \"($name)\""
+      for svc in $group {
+        print $"  ($svc.path)"
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
 }

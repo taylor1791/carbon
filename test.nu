@@ -142,3 +142,18 @@ let check_pass = (./carbon check | complete)
 assert ($check_pass.exit_code == 0) "check should pass with unique service names"
 let check_pass_output = $"($check_pass.stdout)($check_pass.stderr)"
 assert ($check_pass_output | str contains "check passed") "should report check passed"
+
+# Test the check command - detects duplicate service names
+mkdir .carbon/service-4
+{
+  name: "service-without-dependencies"
+  pull: {}
+  push: {}
+} | save -f .carbon/service-4/carbon.toml
+
+let check_dup = (./carbon check | complete)
+assert ($check_dup.exit_code == 1) "check should fail with duplicate service names"
+let check_dup_output = $"($check_dup.stdout)($check_dup.stderr)"
+assert ($check_dup_output | str contains "duplicate service name") "should report duplicate"
+assert ($check_dup_output | str contains "service-without-dependencies") "should name the duplicate service"
+rm -rf .carbon/service-4
