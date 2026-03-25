@@ -239,3 +239,19 @@ assert ($check_unused.exit_code == 1) "unused push key should fail"
 let check_unused_output = $"($check_unused.stdout)($check_unused.stderr)"
 assert ($check_unused_output | str contains "unused push key") "should report unused push key"
 assert ($check_unused_output | str contains "orphan_key") "should name the unused key"
+
+# Test the graph command
+{ name: "auth-service", pull: { db_url: { service: "db-service", name: "db_url" }, password: { service: "db-service", name: "password" } }, push: { api_key: { value: "key" }, jwt_secret: { value: "secret" } } } | save -f .carbon/service-1/carbon.toml
+{ name: "db-service", pull: {}, push: { db_url: { value: "postgres://localhost" }, password: { value: "secret" } } } | save -f .carbon/service-2/carbon.toml
+{ name: "cache-service", pull: {}, push: {} } | save -f .carbon/service-3/carbon.toml
+
+let graph = (./carbon graph | complete)
+assert ($graph.exit_code == 0) "graph should succeed"
+let graph_output = $graph.stdout
+assert ($graph_output | str contains "digraph") "should contain digraph"
+assert ($graph_output | str contains "rankdir=LR") "should contain rankdir"
+assert ($graph_output | str contains "auth-service") "should contain auth-service node"
+assert ($graph_output | str contains "db-service") "should contain db-service node"
+assert ($graph_output | str contains "cache-service") "should contain cache-service node"
+assert ($graph_output | str contains 'auth-service" -> "db-service"') "should contain edge from auth to db"
+assert ($graph_output | str contains "db_url") "should label edge with pulled secret"

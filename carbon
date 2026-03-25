@@ -359,6 +359,35 @@ def "main check" []: nothing -> nothing {
   }
 }
 
+# Outputs the service dependency graph in DOT (Graphviz) format.
+#
+# Pipe to dot to render: ./carbon graph | dot -Tpng -o deps.png
+def "main graph" []: nothing -> nothing {
+  let services = discover_services
+
+  mut lines = ["digraph {", "  rankdir=LR", "  node [shape=record]", ""]
+
+  for svc in $services {
+    let fields = $svc.secrets | str join "|"
+    let label = if ($fields | is-empty) { $svc.name } else { $"($svc.name)|($fields)" }
+    $lines = ($lines | append $'  "($svc.name)" [label="($label)"]')
+  }
+
+  $lines = ($lines | append "")
+
+  for svc in $services {
+    let grouped = $svc.pulls | group-by service
+    for target in ($grouped | columns) {
+      if $target == $svc.name { continue }
+      let names = $grouped | get $target | each {|p| $p.name } | str join ", "
+      $lines = ($lines | append $'  "($svc.name)" -> "($target)" [label="($names)"]')
+    }
+  }
+
+  $lines = ($lines | append "}")
+  print ($lines | str join "\n")
+}
+
 def read_working_dir [
   service?: string
 ] {
