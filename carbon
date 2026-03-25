@@ -339,6 +339,7 @@ def "main check" []: nothing -> nothing {
   let results = [
     (check_duplicate_names $services)
     (check_missing_service $services)
+    (check_missing_push_key $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -593,6 +594,25 @@ def check_missing_service [services: list] {
         $errors = $errors + 1
         print $"(ansi red_bold)error(ansi reset): missing service"
         print $"  ($svc.path) pulls from \"($pull.service)\" which has no carbon.toml"
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
+
+# Checks that every pull references a key the target service pushes.
+def check_missing_push_key [services: list] {
+  mut errors = 0
+  let by_name = $services | reduce -f {} {|s, acc| $acc | upsert $s.name $s }
+  for svc in $services {
+    for pull in $svc.pulls {
+      if $pull.service in $by_name {
+        let target = $by_name | get $pull.service
+        if $pull.name not-in $target.secrets {
+          $errors = $errors + 1
+          print $"(ansi red_bold)error(ansi reset): missing push key"
+          print $"  ($svc.path) pulls \"($pull.name)\" from \"($pull.service)\" but ($target.path) does not push \"($pull.name)\""
+        }
       }
     }
   }

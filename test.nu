@@ -175,3 +175,21 @@ assert ($check_missing.exit_code == 1) "check should fail with missing service"
 let check_missing_output = $"($check_missing.stdout)($check_missing.stderr)"
 assert ($check_missing_output | str contains "missing service") "should report missing service"
 assert ($check_missing_output | str contains "nonexistent-service") "should name the missing service"
+
+# Test the check command - detects missing push key
+{
+  name: "service-missing-key"
+  pull: {
+    db_url: {
+      service: "service-without-dependencies"
+      name: "no_such_key"
+    }
+  }
+  push: {}
+} | save -f .carbon/service-3/carbon.toml
+
+let check_key = (./carbon check | complete)
+assert ($check_key.exit_code == 1) "check should fail with missing push key"
+let check_key_output = $"($check_key.stdout)($check_key.stderr)"
+assert ($check_key_output | str contains "missing push key") "should report missing push key"
+assert ($check_key_output | str contains "no_such_key") "should name the missing key"
