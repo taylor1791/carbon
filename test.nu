@@ -193,3 +193,27 @@ assert ($check_key.exit_code == 1) "check should fail with missing push key"
 let check_key_output = $"($check_key.stdout)($check_key.stderr)"
 assert ($check_key_output | str contains "missing push key") "should report missing push key"
 assert ($check_key_output | str contains "no_such_key") "should name the missing key"
+
+# Test the check command - detects circular dependency
+{
+  name: "cycle-a"
+  pull: {
+    x: { service: "cycle-b", name: "x" }
+  }
+  push: { x: { value: "1" } }
+} | save -f .carbon/service-1/carbon.toml
+
+{
+  name: "cycle-b"
+  pull: {
+    x: { service: "cycle-a", name: "x" }
+  }
+  push: { x: { value: "2" } }
+} | save -f .carbon/service-3/carbon.toml
+
+let check_cycle = (./carbon check | complete)
+assert ($check_cycle.exit_code == 1) "check should fail with circular dependency"
+let check_cycle_output = $"($check_cycle.stdout)($check_cycle.stderr)"
+assert ($check_cycle_output | str contains "circular dependency") "should report circular dependency"
+assert ($check_cycle_output | str contains "cycle-a") "should name service in cycle"
+assert ($check_cycle_output | str contains "cycle-b") "should name other service in cycle"

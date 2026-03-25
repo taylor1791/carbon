@@ -340,6 +340,7 @@ def "main check" []: nothing -> nothing {
     (check_duplicate_names $services)
     (check_missing_service $services)
     (check_missing_push_key $services)
+    (check_circular_dependency $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -617,4 +618,74 @@ def check_missing_push_key [services: list] {
     }
   }
   { errors: $errors, warnings: 0 }
+}
+
+# Checks for circular dependencies in the service graph.
+def check_circular_dependency [services: list] {
+  mut errors = 0
+  let by_name = $services | reduce -f {} {|s, acc| $acc | upsert $s.name $s }
+  let cycles = detect_cycles $services
+  for cycle in $cycles {
+    $errors = $errors + 1
+    let chain = $cycle | each {|name|
+      let path = if $name in $by_name { $by_name | get $name | get path } else { "?" }
+      $"($name) \(($path)\)"
+    } | str join " -> "
+    print $"(ansi red_bold)error(ansi reset): circular dependency"
+    print $"  ($chain)"
+  }
+  { errors: $errors, warnings: 0 }
+}
+
+# Detects cycles in the dependency graph using DFS with three-color marking.
+def detect_cycles [services: list] {
+  let adj = $services | reduce -f {} {|svc, acc|
+    $acc | upsert $svc.name $svc.dependencies
+  }
+
+  let all_names = $adj | columns
+  mut color = $all_names | reduce -f {} {|name, acc| $acc | upsert $name 0 }
+  mut cycles = []
+
+  for $name in $all_names {
+    if ($color | get $name) == 0 {
+      let result = dfs_visit $name $adj $color []
+      $color = $result.color
+      $cycles = ($cycles | append $result.cycles)
+    }
+  }
+
+  $cycles
+}
+
+# Performs DFS from a given node, returning updated color map and any found cycles.
+def dfs_visit [
+  node: string
+  adj: record
+  color: record
+  path: list<string>
+] {
+  let color = ($color | upsert $node 1)
+  let path = ($path | append $node)
+  mut color = $color
+  mut cycles = []
+
+  let neighbors = if $node in $adj { $adj | get $node } else { [] }
+  for $neighbor in $neighbors {
+    let neighbor_color = if $neighbor in $color { $color | get $neighbor } else { 2 }
+
+    if $neighbor_color == 1 {
+      let cycle_start = $path | enumerate
+        | where {|e| $e.item == $neighbor } | first | get index
+      let cycle = $path | skip $cycle_start | append $neighbor
+      $cycles = ($cycles | append [$cycle])
+    } else if $neighbor_color == 0 {
+      let result = dfs_visit $neighbor $adj $color $path
+      $color = $result.color
+      $cycles = ($cycles | append $result.cycles)
+    }
+  }
+
+  $color = ($color | upsert $node 2)
+  { color: $color, cycles: $cycles }
 }
