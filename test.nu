@@ -137,7 +137,10 @@ def as_user [
   cp $".carbon/private-key.age.($name)" .carbon/private-key.age
 }
 
-# Test the check command - passes with unique service names
+# Test the check command - passes with aligned services
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {} } | save -f .carbon/service-1/carbon.toml
+{ name: "svc-b", pull: {}, push: { url: { value: "https://example.com" } } } | save -f .carbon/service-2/carbon.toml
+{ name: "svc-c", pull: {}, push: {} } | save -f .carbon/service-3/carbon.toml
 let check_pass = (./carbon check | complete)
 assert ($check_pass.exit_code == 0) "check should pass with unique service names"
 let check_pass_output = $"($check_pass.stdout)($check_pass.stderr)"
@@ -146,7 +149,7 @@ assert ($check_pass_output | str contains "check passed") "should report check p
 # Test the check command - detects duplicate service names
 mkdir .carbon/service-4
 {
-  name: "service-without-dependencies"
+  name: "svc-a"
   pull: {}
   push: {}
 } | save -f .carbon/service-4/carbon.toml
@@ -155,7 +158,7 @@ let check_dup = (./carbon check | complete)
 assert ($check_dup.exit_code == 1) "check should fail with duplicate service names"
 let check_dup_output = $"($check_dup.stdout)($check_dup.stderr)"
 assert ($check_dup_output | str contains "duplicate service name") "should report duplicate"
-assert ($check_dup_output | str contains "service-without-dependencies") "should name the duplicate service"
+assert ($check_dup_output | str contains "svc-a") "should name the duplicate service"
 rm -rf .carbon/service-4
 
 # Test the check command - detects missing service
@@ -181,7 +184,7 @@ assert ($check_missing_output | str contains "nonexistent-service") "should name
   name: "service-missing-key"
   pull: {
     db_url: {
-      service: "service-without-dependencies"
+      service: "svc-a"
       name: "no_such_key"
     }
   }
@@ -217,3 +220,22 @@ let check_cycle_output = $"($check_cycle.stdout)($check_cycle.stderr)"
 assert ($check_cycle_output | str contains "circular dependency") "should report circular dependency"
 assert ($check_cycle_output | str contains "cycle-a") "should name service in cycle"
 assert ($check_cycle_output | str contains "cycle-b") "should name other service in cycle"
+
+# Test the check command - detects unused push key
+{
+  name: "svc-unused"
+  pull: {}
+  push: { orphan_key: { value: "unused" } }
+} | save -f .carbon/service-1/carbon.toml
+
+{
+  name: "svc-other"
+  pull: {}
+  push: {}
+} | save -f .carbon/service-3/carbon.toml
+
+let check_unused = (./carbon check | complete)
+assert ($check_unused.exit_code == 1) "unused push key should fail"
+let check_unused_output = $"($check_unused.stdout)($check_unused.stderr)"
+assert ($check_unused_output | str contains "unused push key") "should report unused push key"
+assert ($check_unused_output | str contains "orphan_key") "should name the unused key"

@@ -341,6 +341,7 @@ def "main check" []: nothing -> nothing {
     (check_missing_service $services)
     (check_missing_push_key $services)
     (check_circular_dependency $services)
+    (check_unused_push_key $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -618,6 +619,28 @@ def check_missing_push_key [services: list] {
     }
   }
   { errors: $errors, warnings: 0 }
+}
+
+# Checks for push keys that no other service pulls. Self-pulls excluded.
+def check_unused_push_key [services: list] {
+  mut warnings = 0
+
+  let all_pulls = $services | each {|svc|
+    $svc.pulls | where {|p| $p.service != $svc.name }
+      | each {|p| { service: $p.service, name: $p.name } }
+  } | flatten
+
+  for svc in $services {
+    for key in $svc.secrets {
+      let pulled = $all_pulls | where {|p| $p.service == $svc.name and $p.name == $key }
+      if ($pulled | is-empty) {
+        $warnings = $warnings + 1
+        print $"(ansi yellow_bold)warning(ansi reset): unused push key"
+        print $"  ($svc.path) pushes \"($key)\" but no service pulls it"
+      }
+    }
+  }
+  { errors: 0, warnings: $warnings }
 }
 
 # Checks for circular dependencies in the service graph.
