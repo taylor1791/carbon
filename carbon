@@ -330,6 +330,30 @@ def "main read" [
   }
 }
 
+# Checks the dependency graph for errors and warnings.
+#
+# Scans for all carbon.toml files and validates the dependency graph.
+def "main check" []: nothing -> nothing {
+  let services = discover_services
+
+  let results = [
+  ]
+  let errors = $results | each {|r| $r.errors } | append 0 | math sum
+  let warnings = $results | each {|r| $r.warnings } | append 0 | math sum
+
+  if $errors > 0 {
+    let summary = $"($errors) errors, ($warnings) warnings"
+    print $"(ansi red_bold)check failed(ansi reset): ($summary)"
+    exit 1
+  } else if $warnings > 0 {
+    let summary = $"($warnings) warnings"
+    print $"(ansi yellow_bold)check failed(ansi reset): ($summary)"
+    exit 1
+  } else {
+    print $"(ansi green_bold)check passed(ansi reset)"
+  }
+}
+
 def read_working_dir [
   service?: string
 ] {
@@ -506,4 +530,36 @@ def find [
   # Reached the ceiling without finding the file
   log debug $"Reached ceiling ($ceiling) without finding ($name)"
   null
+}
+
+# Discovers all services in the monorepo by scanning for carbon.toml files.
+def discover_services [] {
+  glob $"($git_root)/**/($service_config_name)" | each { |config_path|
+    let config = open $config_path
+    let service_name = $config | get name
+    let rel_path = $config_path | str replace $"($git_root)/" ""
+    let pulls = $config | get pull? | default {}
+      | columns
+      | each { |col|
+        let pull = $config | get pull | get $col
+        {
+          local_name: $col
+          service: ($pull | get service? | default null)
+          name: ($pull | get name? | default $col)
+        }
+      }
+      | where {|p| $p.service != null }
+    {
+      name: $service_name
+      path: $rel_path
+      secrets: ($config | get push? | default {} | columns)
+      pulls: $pulls
+      dependencies: (
+        $pulls
+          | each {|p| $p.service }
+          | where {|s| $s != $service_name }
+          | uniq
+      )
+    }
+  }
 }

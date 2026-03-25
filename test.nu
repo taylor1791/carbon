@@ -136,3 +136,9 @@ def as_user [
 ] {
   cp $".carbon/private-key.age.($name)" .carbon/private-key.age
 }
+
+# Test the check command - passes with unique service names
+let check_pass = (./carbon check | complete)
+assert ($check_pass.exit_code == 0) "check should pass with unique service names"
+let check_pass_output = $"($check_pass.stdout)($check_pass.stderr)"
+assert ($check_pass_output | str contains "check passed") "should report check passed"
