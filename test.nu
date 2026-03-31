@@ -75,7 +75,7 @@ do {
     file: "secrets.json"
     registry: {
       use: {
-        command: "echo {{registry}} > REGISTRY"
+        command: "echo {{carbon.registry}} > REGISTRY"
       }
       current: {
         command: "cat REGISTRY"
@@ -95,7 +95,7 @@ do {
         command: "open secrets.json | get 'password'"
       }]
       queue_url: {
-        value: "http://localhost/{{registry}}-jobs"
+        value: "http://localhost/{{carbon.registry}}-jobs"
       }
     }
   } | save -f carbon.toml

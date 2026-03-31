@@ -107,7 +107,7 @@ def "main push" [
   let publish = $service_config | get push? | default {}
   for secret_name in ($publish | columns) {
     let expression = find_expression $registry ($publish | get $secret_name) $secret_name
-    let secret = resolve $expression $working_dir { registry: $registry } | to json --raw
+    let secret = resolve $expression $working_dir { "carbon.registry": $registry } | to json --raw
     log debug $"Publishing secret ($secret_name) with value: ($secret)"
 
     with-env {
@@ -152,7 +152,7 @@ def "main pull" [
         [0, _] => $result.stdout,
         [_, $err] if $err =~ "component \\[.*\\] not found" and 'default' in $definition => {
           let variables = {
-            registry: $registry
+            "carbon.registry": $registry
           };
 
           resolve ($definition | get default) $working_dir $variables
@@ -193,7 +193,7 @@ def "main use" [
   }
 
   let variables = {
-    registry: $registry
+    "carbon.registry": $registry
   }
 
   execute ($service_config | get registry.use) $working_dir $variables
