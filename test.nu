@@ -321,3 +321,20 @@ assert ($graph_output | str contains "db-service") "should contain db-service no
 assert ($graph_output | str contains "cache-service") "should contain cache-service node"
 assert ($graph_output | str contains 'auth-service" -> "db-service"') "should contain edge from auth to db"
 assert ($graph_output | str contains "db_url") "should label edge with pulled secret"
+
+# Test the check command - passes with valid derive
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {}, derive: { full_url: { value: "https://{{pull.url}}/api" } } } | save -f .carbon/service-1/carbon.toml
+{ name: "svc-b", pull: {}, push: { url: { value: "example.com" } } } | save -f .carbon/service-2/carbon.toml
+{ name: "svc-c", pull: {}, push: {} } | save -f .carbon/service-3/carbon.toml
+
+let check_derive_pass = (./carbon check | complete)
+assert ($check_derive_pass.exit_code == 0) "check should pass with valid derive"
+
+# Test the check command - detects derive/pull name collision
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {}, derive: { url: { value: "https://{{pull.url}}/api" } } } | save -f .carbon/service-1/carbon.toml
+
+let check_collision = (./carbon check | complete)
+assert ($check_collision.exit_code == 1) "check should fail with derive/pull collision"
+let check_collision_output = $"($check_collision.stdout)($check_collision.stderr)"
+assert ($check_collision_output | str contains "derive/pull name collision") "should report collision"
+assert ($check_collision_output | str contains "url") "should name the colliding key"

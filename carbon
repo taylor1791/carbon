@@ -353,6 +353,7 @@ def "main check" []: nothing -> nothing {
     (check_missing_push_key $services)
     (check_circular_dependency $services)
     (check_unused_push_key $services)
+    (check_derive_pull_collision $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -603,12 +604,15 @@ def discover_services [] {
         false
       }
     }
+    let derive_definitions = $config | get derive? | default {}
     {
       name: $service_name
       path: $rel_path
       secrets: ($push | columns)
       pulls: $pulls
       expect_unused: $expect_unused
+      derives: ($derive_definitions | columns)
+      derive_definitions: $derive_definitions
       dependencies: (
         $pulls
           | each {|p| $p.service }
@@ -714,6 +718,23 @@ def check_circular_dependency [services: list] {
   }
   { errors: $errors, warnings: 0 }
 }
+
+# Checks that no derive key collides with a pull key in the same service.
+def check_derive_pull_collision [services: list] {
+  mut errors = 0
+  for svc in $services {
+    let pull_keys = $svc.pulls | each {|p| $p.local_name }
+    for derive_key in $svc.derives {
+      if $derive_key in $pull_keys {
+        $errors = $errors + 1
+        print $"(ansi red_bold)error(ansi reset): derive/pull name collision"
+        print $"  ($svc.path) has both a pull and derive named \"($derive_key)\""
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
+
 
 # Detects cycles in the dependency graph using DFS with three-color marking.
 def detect_cycles [services: list] {
