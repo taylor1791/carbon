@@ -240,6 +240,45 @@ let check_unused_output = $"($check_unused.stdout)($check_unused.stderr)"
 assert ($check_unused_output | str contains "unused push key") "should report unused push key"
 assert ($check_unused_output | str contains "orphan_key") "should name the unused key"
 
+# Test the check command - expect_unused suppresses unused push key warning
+{
+  name: "svc-unused"
+  pull: {}
+  push: { orphan_key: { value: "unused", expect_unused: true } }
+} | save -f .carbon/service-1/carbon.toml
+
+{ name: "svc-clean", pull: {}, push: {} } | save -f .carbon/service-2/carbon.toml
+
+{
+  name: "svc-other"
+  pull: {}
+  push: {}
+} | save -f .carbon/service-3/carbon.toml
+
+let check_expect_unused = (./carbon check | complete)
+assert ($check_expect_unused.exit_code == 0) "expect_unused should suppress unused push key warning"
+let check_expect_unused_output = $"($check_expect_unused.stdout)($check_expect_unused.stderr)"
+assert (not ($check_expect_unused_output | str contains "unused push key")) "should not report unused push key"
+
+# Test the check command - expect_unused on a pulled key warns
+{
+  name: "svc-expect-unused-pulled"
+  pull: {}
+  push: { some_key: { value: "val", expect_unused: true } }
+} | save -f .carbon/service-1/carbon.toml
+
+{
+  name: "svc-puller"
+  pull: { x: { service: "svc-expect-unused-pulled", name: "some_key" } }
+  push: {}
+} | save -f .carbon/service-3/carbon.toml
+
+let check_eu_pulled = (./carbon check | complete)
+assert ($check_eu_pulled.exit_code == 1) "expect_unused on pulled key should warn"
+let check_eu_pulled_output = $"($check_eu_pulled.stdout)($check_eu_pulled.stderr)"
+assert ($check_eu_pulled_output | str contains "expected unused push key is pulled") "should report expected unused but pulled"
+assert ($check_eu_pulled_output | str contains "some_key") "should name the key"
+
 # Test the graph command
 { name: "auth-service", pull: { db_url: { service: "db-service", name: "db_url" }, password: { service: "db-service", name: "password" } }, push: { api_key: { value: "key" }, jwt_secret: { value: "secret" } } } | save -f .carbon/service-1/carbon.toml
 { name: "db-service", pull: {}, push: { db_url: { value: "postgres://localhost" }, password: { value: "secret" } } } | save -f .carbon/service-2/carbon.toml

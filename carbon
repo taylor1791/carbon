@@ -583,11 +583,21 @@ def discover_services [] {
         }
       }
       | where {|p| $p.service != null }
+    let push = $config | get push? | default {}
+    let expect_unused = $push | columns | where { |col|
+      let val = $push | get $col
+      if ($val | describe | str starts-with "record") {
+        ($val | get expect_unused? | default false) == true
+      } else {
+        false
+      }
+    }
     {
       name: $service_name
       path: $rel_path
-      secrets: ($config | get push? | default {} | columns)
+      secrets: ($push | columns)
       pulls: $pulls
+      expect_unused: $expect_unused
       dependencies: (
         $pulls
           | each {|p| $p.service }
@@ -662,7 +672,12 @@ def check_unused_push_key [services: list] {
   for svc in $services {
     for key in $svc.secrets {
       let pulled = $all_pulls | where {|p| $p.service == $svc.name and $p.name == $key }
-      if ($pulled | is-empty) {
+      let is_expect_unused = $key in $svc.expect_unused
+      if $is_expect_unused and ($pulled | is-not-empty) {
+        $warnings = $warnings + 1
+        print $"(ansi yellow_bold)warning(ansi reset): expected unused push key is pulled"
+        print $"  ($svc.path) marks \"($key)\" as expect_unused but it is pulled"
+      } else if (not $is_expect_unused) and ($pulled | is-empty) {
         $warnings = $warnings + 1
         print $"(ansi yellow_bold)warning(ansi reset): unused push key"
         print $"  ($svc.path) pushes \"($key)\" but no service pulls it"
