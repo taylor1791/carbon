@@ -167,6 +167,17 @@ def "main pull" [
     $contents = ($contents | upsert $local_name $value)
   }
 
+  let derives = $service_config | get derive? | default {}
+  let pull_contents = $contents
+  for derive_name in ($derives | columns) {
+    let expression = $derives | get $derive_name
+    let variables = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
+      $acc | upsert $"pull.($key)" ($pull_contents | get $key)
+    }
+    let value = template ($expression | get value) $variables
+    $contents = ($contents | upsert $derive_name $value)
+  }
+
   let file_name = $service_config | get file? | default ".environment.json"
   let file_path = $working_dir | path join $file_name
   log debug $"Saving pulled secrets to ($file_name)"

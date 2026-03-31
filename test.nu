@@ -109,6 +109,33 @@ do {
   assert ("http://localhost/dev-jobs" == (../../carbon read -r dev service-with-registry queue_url))
 }
 
+# Test the derive section in pull
+as_user "user1"
+{
+  name: "service-with-derive"
+  pull: {
+    db_host: {
+      service: "service-without-dependencies"
+      name: "gateway"
+    }
+  }
+  push: {
+    gateway: {
+      value: "https://example.com"
+    }
+  }
+  derive: {
+    database_url: {
+      value: "postgres://app:secret@{{pull.db_host}}/mydb"
+    }
+  }
+} | save -f .carbon/service-1/carbon.toml
+./carbon push .carbon/service-1
+./carbon pull .carbon/service-1
+let derive_env = open .carbon/service-1/.environment.json
+assert (($derive_env | get database_url) == "postgres://app:secret@https://example.com/mydb") "derive should compose pull values"
+assert (($derive_env | get db_host) == "https://example.com") "pull values should still be present"
+
 # Test adding a user
 as_user "user3"
 let initial_password = open .carbon/registry.yaml | get service-with-dependencies.password
