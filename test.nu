@@ -338,3 +338,12 @@ assert ($check_collision.exit_code == 1) "check should fail with derive/pull col
 let check_collision_output = $"($check_collision.stdout)($check_collision.stderr)"
 assert ($check_collision_output | str contains "derive/pull name collision") "should report collision"
 assert ($check_collision_output | str contains "url") "should name the colliding key"
+
+# Test the check command - detects invalid derive reference
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {}, derive: { full_url: { value: "https://{{pull.missing}}/api" } } } | save -f .carbon/service-1/carbon.toml
+
+let check_bad_ref = (./carbon check | complete)
+assert ($check_bad_ref.exit_code == 1) "check should fail with invalid derive reference"
+let check_bad_ref_output = $"($check_bad_ref.stdout)($check_bad_ref.stderr)"
+assert ($check_bad_ref_output | str contains "invalid derive reference") "should report invalid reference"
+assert ($check_bad_ref_output | str contains "missing") "should name the missing pull key"

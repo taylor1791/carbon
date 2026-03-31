@@ -354,6 +354,7 @@ def "main check" []: nothing -> nothing {
     (check_circular_dependency $services)
     (check_unused_push_key $services)
     (check_derive_pull_collision $services)
+    (check_derive_references $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -735,6 +736,25 @@ def check_derive_pull_collision [services: list] {
   { errors: $errors, warnings: 0 }
 }
 
+# Checks that every {{pull.x}} reference in a derive's value has a matching pull key.
+def check_derive_references [services: list] {
+  mut errors = 0
+  for svc in $services {
+    let pull_keys = $svc.pulls | each {|p| $p.local_name }
+    for derive_key in $svc.derives {
+      let value = $svc.derive_definitions | get $derive_key | get value
+      let refs = $value | parse --regex '\{\{pull\.(?P<name>[^}]+)\}\}' | get name
+      for ref in $refs {
+        if $ref not-in $pull_keys {
+          $errors = $errors + 1
+          print $"(ansi red_bold)error(ansi reset): invalid derive reference"
+          print $"  ($svc.path) derive \"($derive_key)\" references {{pull.($ref)}} but no pull named \"($ref)\" exists"
+        }
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
 
 # Detects cycles in the dependency graph using DFS with three-color marking.
 def detect_cycles [services: list] {
