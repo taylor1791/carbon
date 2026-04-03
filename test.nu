@@ -136,6 +136,11 @@ let derive_env = open .carbon/service-1/.environment.json
 assert (($derive_env | get database_url) == "postgres://app:secret@https://example.com/mydb") "derive should compose pull values"
 assert (($derive_env | get db_host) == "https://example.com") "pull values should still be present"
 
+# Test the run command
+let run_result = (./carbon run -s .carbon/service-1 printenv database_url | complete)
+assert ($run_result.exit_code == 0) "run should exit 0"
+assert (($run_result.stdout | str trim) == "postgres://app:secret@https://example.com/mydb") "run should expose derived env vars"
+
 # Test adding a user
 as_user "user3"
 let initial_password = open .carbon/registry.yaml | get service-with-dependencies.password
