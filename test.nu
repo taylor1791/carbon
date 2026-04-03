@@ -352,3 +352,56 @@ assert ($check_bad_ref.exit_code == 1) "check should fail with invalid derive re
 let check_bad_ref_output = $"($check_bad_ref.stdout)($check_bad_ref.stderr)"
 assert ($check_bad_ref_output | str contains "invalid derive reference") "should report invalid reference"
 assert ($check_bad_ref_output | str contains "missing") "should name the missing pull key"
+
+# Test derive with registry_pattern (pull + derive + push + use)
+as_user "user2"
+do {
+  cd .carbon/service-2
+
+  {
+    name: "svc-derive-pattern"
+    file: "secrets.json"
+    registry: {
+      use: { command: "echo {{carbon.registry}} > REGISTRY" }
+      current: { command: "cat REGISTRY" }
+    }
+    pull: {
+      host: {
+        service: "svc-derive-pattern"
+        default: { value: "localhost" }
+      }
+    }
+    push: {
+      host: { value: "localhost" }
+    }
+    derive: {
+      conn_url: [
+        { registry_pattern: "dev", value: "http://{{pull.host}}:3000" }
+        { value: "http://{{pull.host}}:8080" }
+      ]
+    }
+  } | save -f carbon.toml
+
+  ../../carbon use dev
+  ../../carbon push
+  ../../carbon pull
+  let env_dev = open secrets.json
+  assert (($env_dev | get conn_url) == "http://localhost:3000") "derive should pick dev pattern"
+}
+
+# Test check passes with valid array-form derive refs
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {}, derive: { full_url: [{ registry_pattern: "dev", value: "https://{{pull.url}}/dev" }, { value: "https://{{pull.url}}/default" }] } } | save -f .carbon/service-1/carbon.toml
+{ name: "svc-b", pull: {}, push: { url: { value: "example.com" } } } | save -f .carbon/service-2/carbon.toml
+{ name: "svc-c", pull: {}, push: {} } | save -f .carbon/service-3/carbon.toml
+
+let check_derive_arr_pass = (./carbon check | complete)
+assert ($check_derive_arr_pass.exit_code == 0) "check should pass with valid array-form derive"
+
+# Test check detects invalid refs in array-form derives
+{ name: "svc-a", pull: { url: { service: "svc-b", name: "url" } }, push: {}, derive: { full_url: [{ registry_pattern: "dev", value: "https://{{pull.url}}/dev" }, { value: "https://{{pull.nope}}/default" }] } } | save -f .carbon/service-1/carbon.toml
+
+let check_derive_arr_bad = (./carbon check | complete)
+assert ($check_derive_arr_bad.exit_code == 1) "check should fail with invalid array-form derive ref"
+let check_derive_arr_bad_output = $"($check_derive_arr_bad.stdout)($check_derive_arr_bad.stderr)"
+assert ($check_derive_arr_bad_output | str contains "invalid derive reference") "should report invalid reference in array form"
+assert ($check_derive_arr_bad_output | str contains "nope") "should name the missing pull key in array form"

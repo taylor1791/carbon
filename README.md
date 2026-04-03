@@ -94,9 +94,27 @@ Derives create new values by interpolating pulled secrets using `{{pull.<key>}}`
 templates. Derived values appear alongside pulls in the output file and as environment
 variables in `carbon run`.
 
+| Field              | Description                                                   |
+|--------------------|---------------------------------------------------------------|
+| `value`            | Template string with `{{pull.<key>}}` placeholders.           |
+| `registry_pattern` | Regex matched against the registry name (array form only).    |
+
 ```toml
+# Simple derive
 [derive.pool_url]
 value = "{{pull.database_url}}?poolSize=10"
+
+# Registry-pattern variants (use [[derive.<name>]])
+[[derive.conn_url]]
+registry_pattern = "dev"
+value = "http://{{pull.host}}:3000"
+
+[[derive.conn_url]]
+registry_pattern = "prd"
+value = "https://{{pull.host}}"
+
+[[derive.conn_url]]
+value = "http://{{pull.host}}:8080"
 ```
 
 ### `[registry]` — configure registry selection
