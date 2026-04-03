@@ -434,7 +434,7 @@ def resolve_contents [
   let derives = $service_config | get derive? | default {}
   let pull_contents = $contents
   for derive_name in ($derives | columns) {
-    let expression = $derives | get $derive_name
+    let expression = find_expression $registry ($derives | get $derive_name) $derive_name
     let variables = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
       $acc | upsert $"pull.($key)" ($pull_contents | get $key)
     }
@@ -772,13 +772,17 @@ def check_derive_references [services: list] {
   for svc in $services {
     let pull_keys = $svc.pulls | each {|p| $p.local_name }
     for derive_key in $svc.derives {
-      let value = $svc.derive_definitions | get $derive_key | get value
-      let refs = $value | parse --regex '\{\{pull\.(?P<name>[^}]+)\}\}' | get name
-      for ref in $refs {
-        if $ref not-in $pull_keys {
-          $errors = $errors + 1
-          print $"(ansi red_bold)error(ansi reset): invalid derive reference"
-          print $"  ($svc.path) derive \"($derive_key)\" references {{pull.($ref)}} but no pull named \"($ref)\" exists"
+      let definition = $svc.derive_definitions | get $derive_key
+      let is_array = ($definition | describe | str starts-with "table") or ($definition | describe | str starts-with "list")
+      let values = if $is_array { $definition | get value } else { [($definition | get value)] }
+      for value in $values {
+        let refs = $value | parse --regex '\{\{pull\.(?P<name>[^}]+)\}\}' | get name
+        for ref in $refs {
+          if $ref not-in $pull_keys {
+            $errors = $errors + 1
+            print $"(ansi red_bold)error(ansi reset): invalid derive reference"
+            print $"  ($svc.path) derive \"($derive_key)\" references {{pull.($ref)}} but no pull named \"($ref)\" exists"
+          }
         }
       }
     }
