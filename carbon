@@ -133,55 +133,33 @@ def "main pull" [
 ]: nothing -> nothing {
   let working_dir = read_working_dir $service
   let service_config = open ($working_dir | path join $service_config_name)
-  let registry = read_registry $service_config $working_dir
-  let sops = read_sops_config $registry
-
-  mut contents = {}
-  for local_name in ($service_config | get pull? | default {} | columns) {
-    let $definition = $service_config | get pull | get $local_name
-    let service_name = $definition | get service? | to json
-    let remote_name = $definition | get name? | default $local_name | to json
-    let secret = $'[($service_name)][($remote_name)]'
-
-    let value = with-env {
-      SOPS_AGE_KEY_FILE: $private_key_file
-    } {
-      let result = sops --config $sops.config_path --decrypt --extract $secret $sops.registry_path | complete
-
-      match [$result.exit_code, $result.stderr] {
-        [0, _] => $result.stdout,
-        [_, $err] if $err =~ "component \\[.*\\] not found" and 'default' in $definition => {
-          let variables = {
-            "carbon.registry": $registry
-          };
-
-          resolve ($definition | get default) $working_dir $variables
-        },
-        [_, _] => (error make -u {
-          msg: $"The ($service_name) service has not published ($remote_name)"
-        }),
-      }
-    }
-
-    log debug $"Pulled secret ($local_name) with value ($value)"
-    $contents = ($contents | upsert $local_name $value)
-  }
-
-  let derives = $service_config | get derive? | default {}
-  let pull_contents = $contents
-  for derive_name in ($derives | columns) {
-    let expression = $derives | get $derive_name
-    let variables = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
-      $acc | upsert $"pull.($key)" ($pull_contents | get $key)
-    }
-    let value = template ($expression | get value) $variables
-    $contents = ($contents | upsert $derive_name $value)
-  }
+  let contents = resolve_contents $service_config $working_dir
 
   let file_name = $service_config | get file? | default ".environment.json"
   let file_path = $working_dir | path join $file_name
   log debug $"Saving pulled secrets to ($file_name)"
   $contents | save -f $file_path
+}
+
+# Runs a command with pulled secrets and derives as environment variables.
+#
+# Resolves the service's configuration (pulls + derives), sets them as
+# environment variables, runs the given command, and propagates its exit code.
+#
+# If no service is provided, the closest ancestor service will be used. Provided
+# services are relative to the git root.
+def "main run" [
+  --service (-s): string # Path to the service.
+  --command (-c): string # The command to run.
+]: nothing -> nothing {
+  let working_dir = read_working_dir $service
+  let service_config = open ($working_dir | path join $service_config_name)
+  let contents = resolve_contents $service_config $working_dir
+
+  with-env $contents {
+    try { nu -c $command } catch {|e| print -e ($e | get rendered? | default $e.msg) }
+  }
+  exit $env.LAST_EXIT_CODE
 }
 
 # Changes the registry used by a service.
@@ -413,6 +391,58 @@ def read_working_dir [
   }
 
   $config_path | path dirname
+}
+
+def resolve_contents [
+  service_config: record
+  working_dir: path
+] {
+  let registry = read_registry $service_config $working_dir
+  let sops = read_sops_config $registry
+
+  mut contents = {}
+  for local_name in ($service_config | get pull? | default {} | columns) {
+    let $definition = $service_config | get pull | get $local_name
+    let service_name = $definition | get service? | to json
+    let remote_name = $definition | get name? | default $local_name | to json
+    let secret = $'[($service_name)][($remote_name)]'
+
+    let value = with-env {
+      SOPS_AGE_KEY_FILE: $private_key_file
+    } {
+      let result = sops --config $sops.config_path --decrypt --extract $secret $sops.registry_path | complete
+
+      match [$result.exit_code, $result.stderr] {
+        [0, _] => $result.stdout,
+        [_, $err] if $err =~ "component \\[.*\\] not found" and 'default' in $definition => {
+          let variables = {
+            "carbon.registry": $registry
+          };
+
+          resolve ($definition | get default) $working_dir $variables
+        },
+        [_, _] => (error make -u {
+          msg: $"The ($service_name) service has not published ($remote_name)"
+        }),
+      }
+    }
+
+    log debug $"Pulled secret ($local_name) with value ($value)"
+    $contents = ($contents | upsert $local_name $value)
+  }
+
+  let derives = $service_config | get derive? | default {}
+  let pull_contents = $contents
+  for derive_name in ($derives | columns) {
+    let expression = $derives | get $derive_name
+    let variables = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
+      $acc | upsert $"pull.($key)" ($pull_contents | get $key)
+    }
+    let value = template ($expression | get value) $variables
+    $contents = ($contents | upsert $derive_name $value)
+  }
+
+  $contents
 }
 
 def read_registry [
