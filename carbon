@@ -157,7 +157,7 @@ def "main run" [
   let contents = resolve_contents $service_config $working_dir
 
   with-env $contents {
-    do -i { ^$command.0 ...($command | skip 1) }
+    try { ^$command.0 ...($command | skip 1) } catch {|e| print -e ($e | get rendered? | default $e.msg) }
   }
   exit $env.LAST_EXIT_CODE
 }
