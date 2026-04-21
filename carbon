@@ -157,7 +157,14 @@ def "main run" [
   let contents = resolve_contents $service_config $working_dir
 
   with-env $contents {
-    try { nu -c $command } catch {|e| print -e ($e | get rendered? | default $e.msg) }
+    # Requirements: 1) stream stdout and stderr, 2) print errors readably,
+    # 3) propagate non-zero exit codes, and 4) set $env.LAST_EXIT_CODE for the
+    # `exit` below. `do -i` suppresses errors silently. `try/catch` with only
+    # `print -e` is readable but swallows the exit code.
+    try { nu -c $command } catch {|e|
+      print -e ($e | get rendered? | default $e.msg)
+      exit ($e | get exit_code? | default 1)
+    }
   }
   exit $env.LAST_EXIT_CODE
 }
