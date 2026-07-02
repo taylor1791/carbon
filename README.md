@@ -90,13 +90,13 @@ value = "http://localhost:3000"
 
 ### `[derive.<name>]` — compose values from pulls
 
-Derives create new values by interpolating pulled secrets using `{{pull.<key>}}`
-templates. Derived values appear alongside pulls in the output file and as environment
-variables in `carbon run`.
+Derives create new values by interpolating pulled secrets and environment variables
+using `{{pull.<key>}}` and `{{env.<key>}}` templates. Derived values appear alongside
+pulls in the output file and as environment variables in `carbon run`.
 
 | Field              | Description                                                   |
 |--------------------|---------------------------------------------------------------|
-| `value`            | Template string with `{{pull.<key>}}` placeholders.           |
+| `value`            | Template string with `{{pull.<key>}}` or `{{env.<key>}}`.     |
 | `registry_pattern` | Regex matched against the registry name (array form only).    |
 
 ```toml
@@ -115,6 +115,14 @@ value = "https://{{pull.host}}"
 
 [[derive.conn_url]]
 value = "http://{{pull.host}}:8080"
+
+# Fall back to a shell env var for non-local registries
+[[derive.AWS_ACCESS_KEY_ID]]
+registry_pattern = "^[cl]"
+value = "LKIA0000000000000000"
+
+[[derive.AWS_ACCESS_KEY_ID]]
+value = "{{env.AWS_ACCESS_KEY_ID}}"
 ```
 
 ### `[registry]` — configure registry selection
@@ -136,6 +144,7 @@ use = { command = "echo {{carbon.registry}} > .registry" }
 |-----------------------|------------------------|---------------------------|
 | `{{carbon.registry}}` | push, derive, registry | Current registry name.    |
 | `{{pull.<key>}}`      | derive                 | Resolved value of a pull. |
+| `{{env.<key>}}`       | derive                 | Shell environment variable. Must be set when the derive is resolved; otherwise `pull` and `run` error. |
 
 ## Example Workflow
 
