@@ -442,10 +442,23 @@ def resolve_contents [
   let pull_contents = $contents
   for derive_name in ($derives | columns) {
     let expression = find_expression $registry ($derives | get $derive_name) $derive_name
-    let variables = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
+    let pull_vars = $pull_contents | columns | reduce -f { "carbon.registry": $registry } {|key, acc|
       $acc | upsert $"pull.($key)" ($pull_contents | get $key)
     }
+    let variables = $env | columns | reduce -f $pull_vars {|key, acc|
+      if (($env | get $key | describe) == "string") {
+        $acc | upsert $"env.($key)" ($env | get $key)
+      } else {
+        $acc
+      }
+    }
     let value = template ($expression | get value) $variables
+    let unresolved = $value | parse --regex '\{\{env\.(?P<name>[^}]+)\}\}' | get name | uniq
+    if ($unresolved | is-not-empty) {
+      error make -u {
+        msg: $"Derive \"($derive_name)\" references unset environment variable\(s\): ($unresolved | str join ', ')"
+      }
+    }
     $contents = ($contents | upsert $derive_name $value)
   }
 

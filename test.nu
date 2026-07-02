@@ -141,6 +141,76 @@ let run_result = (./carbon run -s .carbon/service-1 -c "printenv database_url" |
 assert ($run_result.exit_code == 0) "run should exit 0"
 assert (($run_result.stdout | str trim) == "postgres://app:secret@https://example.com/mydb") "run should expose derived env vars"
 
+# Test derive with {{env.<key>}} substitution
+{
+  name: "service-with-env-derive"
+  pull: {
+    db_host: {
+      service: "service-without-dependencies"
+      name: "gateway"
+    }
+  }
+  push: {
+    gateway: {
+      value: "https://example.com"
+    }
+  }
+  derive: {
+    aws_key: { value: "{{env.CARBON_TEST_ENV_KEY}}" }
+    combined: { value: "{{env.CARBON_TEST_ENV_KEY}}@{{pull.db_host}}" }
+  }
+} | save -f .carbon/service-1/carbon.toml
+./carbon push .carbon/service-1
+with-env { CARBON_TEST_ENV_KEY: "env-secret" } {
+  ./carbon pull .carbon/service-1
+}
+let env_derive = open .carbon/service-1/.environment.json
+assert (($env_derive | get aws_key) == "env-secret") "derive should substitute env variable"
+assert (($env_derive | get combined) == "env-secret@https://example.com") "derive should combine env and pull vars"
+
+# Test that env-only fallback resolves when no registry_pattern matches
+{
+  name: "service-with-env-fallback"
+  pull: {
+    db_host: {
+      service: "service-without-dependencies"
+      name: "gateway"
+    }
+  }
+  push: {
+    gateway: {
+      value: "https://example.com"
+    }
+  }
+  derive: {
+    aws_key: [
+      { registry_pattern: "^[cl]", value: "local-fake" }
+      { value: "{{env.CARBON_TEST_ENV_KEY}}" }
+    ]
+  }
+} | save -f .carbon/service-1/carbon.toml
+./carbon push .carbon/service-1
+with-env { CARBON_TEST_ENV_KEY: "real-key-from-env" } {
+  ./carbon pull .carbon/service-1
+}
+let env_fallback = open .carbon/service-1/.environment.json
+assert (($env_fallback | get aws_key) == "real-key-from-env") "default derive should read from env"
+
+# Test that pull errors when a referenced env var is not set
+{
+  name: "service-with-missing-env"
+  pull: {}
+  push: {}
+  derive: {
+    aws_key: { value: "{{env.CARBON_TEST_UNSET_VAR}}" }
+  }
+} | save -f .carbon/service-1/carbon.toml
+let missing_env_result = (./carbon pull .carbon/service-1 | complete)
+assert ($missing_env_result.exit_code != 0) "pull should fail when env var is unset"
+let missing_env_output = $"($missing_env_result.stdout)($missing_env_result.stderr)"
+assert ($missing_env_output | str contains "CARBON_TEST_UNSET_VAR") "error should name the missing env var"
+assert ($missing_env_output | str contains "aws_key") "error should name the derive"
+
 # Test adding a user
 as_user "user3"
 let initial_password = open .carbon/registry.yaml | get service-with-dependencies.password
