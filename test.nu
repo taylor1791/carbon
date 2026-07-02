@@ -475,3 +475,30 @@ assert ($check_derive_arr_bad.exit_code == 1) "check should fail with invalid ar
 let check_derive_arr_bad_output = $"($check_derive_arr_bad.stdout)($check_derive_arr_bad.stderr)"
 assert ($check_derive_arr_bad_output | str contains "invalid derive reference") "should report invalid reference in array form"
 assert ($check_derive_arr_bad_output | str contains "nope") "should name the missing pull key in array form"
+
+# Test check detects {{env.<key>}} in push values
+{ name: "svc-a", pull: {}, push: { api_key: { value: "{{env.MY_SECRET}}" } } } | save -f .carbon/service-1/carbon.toml
+{ name: "svc-b", pull: {}, push: {} } | save -f .carbon/service-2/carbon.toml
+{ name: "svc-c", pull: {}, push: {} } | save -f .carbon/service-3/carbon.toml
+
+let check_push_env = (./carbon check | complete)
+assert ($check_push_env.exit_code == 1) "check should fail with env ref in push value"
+let check_push_env_output = $"($check_push_env.stdout)($check_push_env.stderr)"
+assert ($check_push_env_output | str contains "env reference in push") "should report env ref in push"
+assert ($check_push_env_output | str contains "MY_SECRET") "should name the referenced env var"
+
+# Test check detects {{env.<key>}} in push commands
+{ name: "svc-a", pull: {}, push: { api_key: { command: "echo {{env.MY_SECRET}}" } } } | save -f .carbon/service-1/carbon.toml
+
+let check_push_env_cmd = (./carbon check | complete)
+assert ($check_push_env_cmd.exit_code == 1) "check should fail with env ref in push command"
+let check_push_env_cmd_output = $"($check_push_env_cmd.stdout)($check_push_env_cmd.stderr)"
+assert ($check_push_env_cmd_output | str contains "env reference in push") "should report env ref in push command"
+
+# Test check detects {{env.<key>}} in array-form push value
+{ name: "svc-a", pull: {}, push: { api_key: [{ registry_pattern: "dev", value: "static" }, { value: "{{env.PROD_SECRET}}" }] } } | save -f .carbon/service-1/carbon.toml
+
+let check_push_env_arr = (./carbon check | complete)
+assert ($check_push_env_arr.exit_code == 1) "check should fail with env ref in array-form push"
+let check_push_env_arr_output = $"($check_push_env_arr.stdout)($check_push_env_arr.stderr)"
+assert ($check_push_env_arr_output | str contains "PROD_SECRET") "should name env ref in array-form push"
