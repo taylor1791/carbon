@@ -340,6 +340,7 @@ def "main check" []: nothing -> nothing {
     (check_unused_push_key $services)
     (check_derive_pull_collision $services)
     (check_derive_references $services)
+    (check_push_env_references $services)
   ]
   let errors = $results | each {|r| $r.errors } | math sum
   let warnings = $results | each {|r| $r.warnings } | math sum
@@ -664,6 +665,7 @@ def discover_services [] {
       expect_unused: $expect_unused
       derives: ($derive_definitions | columns)
       derive_definitions: $derive_definitions
+      push_definitions: $push
       dependencies: (
         $pulls
           | each {|p| $p.service }
@@ -802,6 +804,32 @@ def check_derive_references [services: list] {
             $errors = $errors + 1
             print $"(ansi red_bold)error(ansi reset): invalid derive reference"
             print $"  ($svc.path) derive \"($derive_key)\" references {{pull.($ref)}} but no pull named \"($ref)\" exists"
+          }
+        }
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
+
+# Checks that push values do not reference {{env.<key>}}. Push templates only
+# resolve {{carbon.registry}}, so env references would be pushed literally.
+def check_push_env_references [services: list] {
+  mut errors = 0
+  for svc in $services {
+    for push_key in ($svc.push_definitions | columns) {
+      let val = $svc.push_definitions | get $push_key
+      let is_array = ($val | describe | str starts-with "table") or ($val | describe | str starts-with "list")
+      let entries = if $is_array { $val } else { [$val] }
+      for entry in $entries {
+        let strs = ($entry | columns) | where {|c| $c in ["value", "command"] }
+          | each {|c| $entry | get $c }
+        for str in $strs {
+          let refs = $str | parse --regex '\{\{env\.(?P<name>[^}]+)\}\}' | get name | uniq
+          for ref in $refs {
+            $errors = $errors + 1
+            print $"(ansi red_bold)error(ansi reset): env reference in push"
+            print $"  ($svc.path) push \"($push_key)\" references {{env.($ref)}} but push templates do not resolve env vars"
           }
         }
       }
