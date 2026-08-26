@@ -502,3 +502,37 @@ let check_push_env_arr = (./carbon check | complete)
 assert ($check_push_env_arr.exit_code == 1) "check should fail with env ref in array-form push"
 let check_push_env_arr_output = $"($check_push_env_arr.stdout)($check_push_env_arr.stderr)"
 assert ($check_push_env_arr_output | str contains "PROD_SECRET") "should name env ref in array-form push"
+
+# Test --registries through the built wrapper. Nushell re-quotes command-line
+# arguments to scripts, so the flag can arrive as a string from a shell (newer
+# nushell re-quotes every argument, so even '[dev,prd]' arrives as a string).
+# These must run against the wrapper, not by sourcing: sourcing passes real nu
+# values and would miss the argv path entirely.
+let wrapper = (nix build ".#carbon" --no-link --print-out-paths | str trim | path join "bin" "carbon")
+
+# The bracketed form with a space is re-quoted to a string by every nushell version.
+USER=user2 ^$wrapper init -r "[wrap1, wrap2]" .carbon/service-5
+assert (".carbon/registry.wrap1.yaml" | path exists)
+assert (".carbon/registry.wrap2.yaml" | path exists)
+assert (".carbon/sops.wrap1.yaml" | path exists)
+assert (".carbon/sops.wrap2.yaml" | path exists)
+assert (".carbon/service-5/carbon.toml" | path exists)
+
+# The exact shape hydrogen's justfile uses: carbon init -r "[$HYDROGEN_ENV]"
+USER=user2 ^$wrapper init -r "[wrap3]"
+assert (".carbon/registry.wrap3.yaml" | path exists)
+
+# A single bare registry name
+USER=user2 ^$wrapper init -r wrap4
+assert (".carbon/registry.wrap4.yaml" | path exists)
+
+# request and rekey take the same flag
+USER=user2 ^$wrapper request -r "wrap5,wrap6"
+assert (".carbon/sops.wrap5.yaml" | path exists)
+assert (".carbon/sops.wrap6.yaml" | path exists)
+USER=user2 ^$wrapper rekey -r "[wrap1, wrap2]"
+
+# A real list still works when carbon is used from nushell directly
+nu -c "source ./carbon; main init -r [wrap7, wrap8]"
+assert (".carbon/registry.wrap7.yaml" | path exists)
+assert (".carbon/registry.wrap8.yaml" | path exists)
