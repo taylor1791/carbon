@@ -25,8 +25,8 @@ All notable changes to carbon are documented here. The format is based on
   environment variables, propagating the command's exit code.
 - `check` subcommand: validates the dependency graph — duplicate service names,
   missing services and push keys, circular dependencies, unused push keys,
-  derive/pull collisions, invalid derive references, and `{{env.<key>}}`
-  references in push values.
+  derive/pull collisions, names that differ only by case, invalid derive
+  references, and `{{env.<key>}}` references in push values.
 - `graph` subcommand: emits the service dependency graph in DOT format.
 - `[derive]` section for composing values from pulls, with `registry_pattern`
   variants and `{{env.<key>}}` template variables resolved from the shell
