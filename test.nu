@@ -219,6 +219,11 @@ let sops = open .carbon/sops.yaml
 assert (($sops | get users | length) == 2)
 assert (($sops | get creation_rules.0.age | split row "," | length) == 2)
 
+# Requesting again does not duplicate the key
+./carbon request
+assert ((open .carbon/sops.yaml | get users | length) == 2)
+assert ((open .carbon/sops.yaml | get creation_rules.0.age | split row "," | length) == 2)
+
 # Adding users does not rotate the key
 as_user "user1"
 ./carbon rekey

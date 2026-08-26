@@ -237,17 +237,19 @@ def "main request" [
       let sops_config = open $sops_config_file
       let rule_index = $sops_config.creation_rules | enumerate
         | where {|row| 'age' in $row.item } | get 0.index
-      let new_recipients = $sops_config.creation_rules | get $rule_index | get age
-        | split row -r ",\\s*" | where {|line| $line != "" } | append $public_key
-        | str join ",\n"
+      let recipients = $sops_config.creation_rules | get $rule_index | get age
+        | split row -r ",\\s*" | where {|line| $line != "" }
 
-      let updated_creation_rules = $sops_config.creation_rules
-        | update $rule_index {|it| $it | update age $new_recipients }
-      let updated_config = $sops_config
-        | upsert creation_rules $updated_creation_rules
-        | upsert users ($sops_config.users | append { name: $name, key: $public_key })
+      if $public_key not-in $recipients {
+        let new_recipients = $recipients | append $public_key | str join ",\n"
+        let updated_creation_rules = $sops_config.creation_rules
+          | update $rule_index {|it| $it | update age $new_recipients }
+        let updated_config = $sops_config
+          | upsert creation_rules $updated_creation_rules
+          | upsert users ($sops_config.users | append { name: $name, key: $public_key })
 
-      $updated_config | save -f $sops_config_file
+        $updated_config | save -f $sops_config_file
+      }
     }
   }
 }
