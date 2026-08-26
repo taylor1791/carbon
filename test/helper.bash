@@ -163,3 +163,18 @@ install_carbon() {
     sed -i "1s|.*|#!$(command -v nu)|" carbon
   fi
 }
+
+# Echoes $PATH with every entry that provides `nu` removed.
+#
+# The packaged wrapper carries its own nushell, so nothing it does may depend
+# on the caller having one. Tests use this to run it the way an installed user
+# would.
+path_without_nu() {
+  local dir out=
+  local IFS=:
+  for dir in $PATH; do
+    [ -x "$dir/nu" ] && continue
+    out="${out:+$out:}$dir"
+  done
+  printf '%s' "$out"
+}

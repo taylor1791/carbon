@@ -77,3 +77,14 @@ TOML
   ./carbon push svc
   assert_registry svc url "https://example.com"
 }
+
+@test "wrapper runs a command without nushell on the caller's PATH" {
+  carbon_repo
+  service svc <<'TOML'
+[derive.greeting]
+value = "hello"
+TOML
+  run env PATH="$(path_without_nu)" ./carbon run -s svc -c "printenv greeting"
+  assert_success
+  assert_output "hello"
+}

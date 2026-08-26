@@ -160,7 +160,11 @@ def "main run" [
     # 3) propagate non-zero exit codes, and 4) set $env.LAST_EXIT_CODE for the
     # `exit` below. `do -i` suppresses errors silently. `try/catch` with only
     # `print -e` is readable but swallows the exit code.
-    try { nu -c $command } catch {|e|
+    #
+    # $nu.current-exe rather than a bare `nu`: carbon is already running under
+    # the right nushell, and callers who installed the packaged wrapper have no
+    # nushell on PATH at all.
+    try { ^$nu.current-exe -c $command } catch {|e|
       print -e ($e | get rendered? | default $e.msg)
       exit ($e | get exit_code? | default 1)
     }
