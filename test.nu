@@ -527,10 +527,15 @@ USER=user2 ^$wrapper init -r wrap4
 assert (".carbon/registry.wrap4.yaml" | path exists)
 
 # request and rekey take the same flag
-USER=user2 ^$wrapper request -r "wrap5,wrap6"
+USER=user2 ^$wrapper request -r "[wrap5,wrap6]"
 assert (".carbon/sops.wrap5.yaml" | path exists)
 assert (".carbon/sops.wrap6.yaml" | path exists)
 USER=user2 ^$wrapper rekey -r "[wrap1, wrap2]"
+
+# A bare name cannot smuggle multiple registries; list syntax is required
+let bad_form = (^$wrapper request -r "wrapx,wrapy" | complete)
+assert ($bad_form.exit_code != 0) "unbracketed comma form should be rejected"
+assert not (".carbon/sops.wrapx,wrapy.yaml" | path exists)
 
 # A real list still works when carbon is used from nushell directly
 nu -c "source ./carbon; main init -r [wrap7, wrap8]"
