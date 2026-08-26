@@ -47,6 +47,10 @@ All notable changes to carbon are documented here. The format is based on
   script arguments as strings, so flags typed `list<string>` could never be
   satisfied — `carbon init -r "[dev]"` always failed to parse. Positional rest
   arguments (see Changed) are typed `list<string>` natively from argv.
+- `init` and `request` only worked from the root of the repository. The config
+  directory was resolved relative to the current directory, so running them
+  from a subdirectory created a stray `.carbon` there and then failed writing
+  the key to the real one at the repository root.
 
 ### Migration
 
