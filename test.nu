@@ -14,11 +14,12 @@ assert (".carbon/private-key.age" | path exists)
 assert (1 == (open .carbon/sops.yaml | get users | length))
 assert (".carbon/registry.yaml" | path exists)
 assert (".carbon/service-1/carbon.toml" | path exists)
-assert ((./carbon read _carbon version | str trim) == "0.0.2")
+assert ((./carbon read _carbon version | str trim) == "0.0.3")
 mv .carbon/private-key.age .carbon/private-key.age.user1
 
-# Test the init command with a registry
-USER=user2 ./carbon init .carbon/service-2 --registries '[dev,prd]'
+# Test the init command with registries requested separately
+USER=user2 ./carbon init .carbon/service-2
+USER=user2 ./carbon request dev prd
 assert ("./.carbon/registry.dev.yaml" | path exists)
 assert ("./.carbon/registry.prd.yaml" | path exists)
 assert ("./.carbon/sops.dev.yaml" | path exists)
@@ -508,41 +509,39 @@ assert ($check_push_env_arr.exit_code == 1) "check should fail with env ref in a
 let check_push_env_arr_output = $"($check_push_env_arr.stdout)($check_push_env_arr.stderr)"
 assert ($check_push_env_arr_output | str contains "PROD_SECRET") "should name env ref in array-form push"
 
-# Test --registries through the built wrapper. Nushell re-quotes command-line
-# arguments to scripts, so the flag can arrive as a string from a shell (newer
-# nushell re-quotes every argument, so even '[dev,prd]' arrives as a string).
-# These must run against the wrapper, not by sourcing: sourcing passes real nu
-# values and would miss the argv path entirely.
+# Test positional registry and service arguments through the built wrapper.
+# Nushell re-quotes command-line arguments to scripts, so every argument
+# arrives as a string; rest parameters collect them into a list<string>
+# without any parsing. These must run against the wrapper, not by sourcing:
+# sourcing passes real nu values and would miss the argv path entirely.
 let wrapper = (nix build ".#carbon" --no-link --print-out-paths | str trim | path join "bin" "carbon")
 
-# The bracketed form with a space is re-quoted to a string by every nushell version.
-USER=user2 ^$wrapper init -r "[wrap1, wrap2]" .carbon/service-5
-assert (".carbon/registry.wrap1.yaml" | path exists)
-assert (".carbon/registry.wrap2.yaml" | path exists)
+# init scaffolds multiple services in one call
+USER=user2 ^$wrapper init .carbon/service-5 .carbon/service-6
+assert (".carbon/service-5/carbon.toml" | path exists)
+assert (".carbon/service-6/carbon.toml" | path exists)
+
+# request creates the sops config and the encrypted registry for each name
+USER=user2 ^$wrapper request wrap1 wrap2
 assert (".carbon/sops.wrap1.yaml" | path exists)
 assert (".carbon/sops.wrap2.yaml" | path exists)
-assert (".carbon/service-5/carbon.toml" | path exists)
+assert (".carbon/registry.wrap1.yaml" | path exists)
+assert (".carbon/registry.wrap2.yaml" | path exists)
 
-# The exact shape hydrogen's justfile uses: carbon init -r "[$HYDROGEN_ENV]"
-USER=user2 ^$wrapper init -r "[wrap3]"
+# rekey takes the same positional registries
+USER=user2 ^$wrapper rekey wrap1 wrap2
+
+# The bootstrap flow a consumer setup script uses
+USER=user2 ^$wrapper init
+USER=user2 ^$wrapper request wrap3
 assert (".carbon/registry.wrap3.yaml" | path exists)
 
-# A single bare registry name
-USER=user2 ^$wrapper init -r wrap4
-assert (".carbon/registry.wrap4.yaml" | path exists)
+# The retired --registries flag fails loudly instead of silently no-oping
+let old_flag = (^$wrapper init -r "[wrap9]" | complete)
+assert ($old_flag.exit_code != 0) "the retired -r flag should be rejected"
+assert not (".carbon/registry.wrap9.yaml" | path exists)
 
-# request and rekey take the same flag
-USER=user2 ^$wrapper request -r "[wrap5,wrap6]"
-assert (".carbon/sops.wrap5.yaml" | path exists)
-assert (".carbon/sops.wrap6.yaml" | path exists)
-USER=user2 ^$wrapper rekey -r "[wrap1, wrap2]"
-
-# A bare name cannot smuggle multiple registries; list syntax is required
-let bad_form = (^$wrapper request -r "wrapx,wrapy" | complete)
-assert ($bad_form.exit_code != 0) "unbracketed comma form should be rejected"
-assert not (".carbon/sops.wrapx,wrapy.yaml" | path exists)
-
-# A real list still works when carbon is used from nushell directly
-nu -c "source ./carbon; main init -r [wrap7, wrap8]"
+# The same syntax works when carbon is used from nushell directly
+nu -c "source ./carbon; main request wrap7 wrap8"
 assert (".carbon/registry.wrap7.yaml" | path exists)
 assert (".carbon/registry.wrap8.yaml" | path exists)
