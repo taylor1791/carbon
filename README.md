@@ -17,12 +17,12 @@ system.
 
 | Command   | Description                                                        |
 |-----------|--------------------------------------------------------------------|
-| `init`    | Bootstraps registries and initializes services.                    |
+| `init`    | Bootstraps the user's key and initializes services.               |
 | `push`    | Pushes a service's exposed configuration to the registry.          |
 | `pull`    | Pulls a service's configuration from the registry.                 |
 | `run`     | Runs a command with pulled secrets and derives as environment variables. |
 | `use`     | Changes the registry used by a service.                            |
-| `request` | Request access to a registry.                                      |
+| `request` | Creates registries and requests access to them.                   |
 | `rekey`   | Applies pending access changes.                                    |
 | `view`    | Views the registry.                                                |
 | `read`    | Read a single value from the registry.                             |
@@ -149,8 +149,9 @@ use = { command = "echo {{carbon.registry}} > .registry" }
 ## Example Workflow
 
 ```sh
-# 1. Initialize — create a registry and a service
-carbon init --registries [dev] .carbon/my-service
+# 1. Initialize — create a service, then a registry
+carbon init .carbon/my-service
+carbon request dev
 
 # 2. Push — publish the service's secrets to the registry
 carbon push .carbon/my-service
