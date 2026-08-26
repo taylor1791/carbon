@@ -36,8 +36,9 @@ def main []: nothing -> nothing {
 #  4. Creates a carbon.toml file for the service if provided and one does not exist.
 def "main init" [
   service?: string # The path of the service to initialize relative to the git root.
-  --registries (-r): list<string> = [""] # Initializes these registries if necessary.
+  --registries (-r): any = [""] # Initializes these registries if necessary. Accepts a list or a string: "[dev, prd]", "dev,prd", or "dev".
 ]: nothing -> nothing {
+  let registries = parse_registries $registries
   let ignore = ($git_root | path join .gitignore)
   if not ($ignore | path exists) {
     touch $ignore
@@ -201,9 +202,10 @@ def "main use" [
 # allow the user to decrypt the registry. The user must be granted access by another
 # user who has access to the registry by running the `rekey` command.
 def "main request" [
-  --registries (-r): list<string> = [""] # The registries of which to request access.
+  --registries (-r): any = [""] # The registries of which to request access. Accepts a list or a string: "[dev, prd]", "dev,prd", or "dev".
   --only-if-created # Only add the user's key if the config file was created.
 ]: nothing -> nothing {
+  let registries = parse_registries $registries
   if not ($config_dir_name | path exists) {
     log debug "Creating config directory..."
     mkdir $config_dir_name
@@ -258,8 +260,9 @@ def "main request" [
 # were removed). Registries can only be updated by another user who has already been
 # granted access.
 def "main rekey" [
-  --registries (-r): list<string> = [""] # The registries which to rekey.
+  --registries (-r): any = [""] # The registries which to rekey. Accepts a list or a string: "[dev, prd]", "dev,prd", or "dev".
 ]: nothing -> nothing {
+  let registries = parse_registries $registries
   for r in $registries {
     let sops = read_sops_config $r
 
@@ -385,6 +388,28 @@ def "main graph" []: nothing -> nothing {
 
   $lines = ($lines | append "}")
   print ($lines | str join "\n")
+}
+
+# Normalizes a --registries flag value. Nushell re-quotes command-line arguments
+# to scripts, so from a shell the flag always arrives as a string; from nushell
+# it can be a real list. Accepts either: [dev, prd], "[dev, prd]", "dev,prd",
+# or "dev". An empty value means the default (unnamed) registry.
+def parse_registries [
+  registries: any
+] {
+  if ($registries | describe | str starts-with "list") {
+    return ($registries | each {|r| $r | into string | str trim })
+  }
+
+  let names = $registries
+    | into string
+    | str trim
+    | str replace -r '^\[(.*)\]$' '$1'
+    | split row -r '[,\s]+'
+    | each {|r| $r | str trim }
+    | where {|r| $r != "" }
+
+  if ($names | is-empty) { [""] } else { $names }
 }
 
 def read_working_dir [
