@@ -339,3 +339,154 @@ TOML
   # Derives resolve against pulls and env only, so the reference is literal.
   assert_env consumer/.environment.json second "{{derive.first}}-two"
 }
+
+# --- self-bootstrap ---------------------------------------------------------
+
+@test "a service bootstraps a secret it both pushes and pulls" {
+  service svc <<'TOML'
+[pull.password]
+service = "svc"
+[pull.password.default]
+command = "echo generated-once"
+[push.password]
+command = "jq -r .password .environment.json"
+expect_unused = true
+TOML
+  ./carbon pull svc
+  assert_env svc/.environment.json password "generated-once"
+  ./carbon push svc
+  assert_registry svc password "generated-once"
+}
+
+@test "a bootstrapped secret stays put across later pulls" {
+  service svc <<'TOML'
+[pull.password]
+service = "svc"
+[pull.password.default]
+command = "head -c 15 /dev/urandom | base64"
+[push.password]
+command = "jq -r .password .environment.json"
+expect_unused = true
+TOML
+  ./carbon pull svc
+  ./carbon push svc
+  local first
+  first="$(jq -r .password svc/.environment.json)"
+
+  ./carbon pull svc
+  assert_env svc/.environment.json password "$first"
+  ./carbon pull svc
+  assert_env svc/.environment.json password "$first"
+}
+
+@test "bootstrapping fails if push runs before the first pull" {
+  service svc <<'TOML'
+[pull.password]
+service = "svc"
+[pull.password.default]
+command = "echo generated-once"
+[push.password]
+command = "jq -r .password .environment.json"
+expect_unused = true
+TOML
+  run ./carbon push svc
+  assert_failure
+  assert_message "returned no output"
+}
+
+@test "a user without access cannot silently regenerate a bootstrapped secret" {
+  carbon_repo alice
+  service svc <<'TOML'
+[pull.password]
+service = "svc"
+[pull.password.default]
+command = "echo generated-once"
+[push.password]
+command = "jq -r .password .environment.json"
+expect_unused = true
+TOML
+  ./carbon pull svc
+  ./carbon push svc
+
+  rm -f .carbon/private-key.age
+  USER=bob ./carbon request
+  mv .carbon/private-key.age .carbon/private-key.age.bob
+  as_user bob
+  rm -f svc/.environment.json
+
+  # The default must not fire for someone who simply cannot decrypt, or two
+  # developers would end up with different values for the same secret.
+  run ./carbon pull svc
+  assert_failure
+  assert_file_not_exist svc/.environment.json
+}
+
+@test "a fixed secret bootstraps from the environment on its first pull" {
+  service svc <<'TOML'
+[pull.api_key]
+service = "svc"
+[pull.api_key.default]
+command = "printenv SEED_API_KEY"
+[push.api_key]
+command = "jq -r .api_key .environment.json"
+expect_unused = true
+TOML
+  SEED_API_KEY=sk-live-fixed ./carbon pull svc
+  assert_env svc/.environment.json api_key "sk-live-fixed"
+  ./carbon push svc
+  assert_registry svc api_key "sk-live-fixed"
+
+  # The seed is needed exactly once: later pulls find the published value.
+  ./carbon pull svc
+  assert_env svc/.environment.json api_key "sk-live-fixed"
+}
+
+@test "a fixed secret survives shell metacharacters intact" {
+  service svc <<'TOML'
+[pull.api_key]
+service = "svc"
+[pull.api_key.default]
+command = "printenv SEED_API_KEY"
+[push.api_key]
+command = "jq -r .api_key .environment.json"
+expect_unused = true
+TOML
+  # printenv is used rather than echo precisely so that sh does not re-split
+  # or re-expand the value.
+  local nasty='sk_A$B c&d(e)f"g'"'"'h`i'
+  SEED_API_KEY="$nasty" ./carbon pull svc
+  ./carbon push svc
+  assert_registry svc api_key "$nasty"
+}
+
+@test "bootstrapping fails rather than publishing an empty value" {
+  service svc <<'TOML'
+[pull.api_key]
+service = "svc"
+[pull.api_key.default]
+command = "printenv SEED_API_KEY"
+[push.api_key]
+command = "jq -r .api_key .environment.json"
+expect_unused = true
+TOML
+  run ./carbon pull svc
+  assert_failure
+  assert_file_not_exist svc/.environment.json
+}
+
+@test "a fixed secret can be seeded by writing the pulled file directly" {
+  service svc <<'TOML'
+[pull.api_key]
+service = "svc"
+[pull.api_key.default]
+command = "printenv SEED_API_KEY"
+[push.api_key]
+command = "jq -r .api_key .environment.json"
+expect_unused = true
+TOML
+  echo '{"api_key":"seeded-by-hand"}' > svc/.environment.json
+  ./carbon push svc
+  assert_registry svc api_key "seeded-by-hand"
+  ./carbon pull svc
+  assert_env svc/.environment.json api_key "seeded-by-hand"
+}

@@ -165,44 +165,24 @@ carbon run --service .carbon/my-service -c "my-app --serve"
 
 ## Tests
 
-The suite is [bats](https://bats-core.readthedocs.io/), split into a unit tier
-that calls carbon's internal functions directly and a CLI tier that drives the
-real binary against sops-encrypted registries.
+The suite is [bats](https://bats-core.readthedocs.io/): a unit tier calling
+carbon's internal functions directly, and a CLI tier driving the real binary
+against sops-encrypted registries.
 
 ```sh
-nix develop           # or: nix-shell
-bats --jobs 8 test/   # ~25s
-bats test/check.bats  # one file
+nix develop
+bats --jobs 8 test/          # whole suite, ~25s
 bats --filter derive test/   # one topic
 ```
 
-Every test runs in its own `$BATS_TEST_TMPDIR` containing a throwaway git repo,
-because carbon resolves all of its paths from `git rev-parse --show-toplevel`.
-Nothing touches the repository you are working in.
+Each test builds its own git repo under `$BATS_TEST_TMPDIR`, because carbon
+resolves every path from `git rev-parse --show-toplevel`. Nothing touches the
+repository you are working in.
 
-| Path                | Covers                                              |
-|---------------------|-----------------------------------------------------|
-| `test/helper.bash`  | fixtures and assertions shared by every file        |
-| `test/unit.bats`    | `template`, `find_expression`, `resolve`, `execute`, `config_path`, `find`, `detect_cycles` |
-| `test/init.bats`    | key bootstrap, gitignore handling, service scaffolding |
-| `test/access.bats`  | `request`, `rekey`, `view`, `read`, and who can decrypt |
-| `test/push.bats`    | value, command, shell, and registry-pattern resolution |
-| `test/pull.bats`    | dependency resolution, defaults, and `[derive]`     |
-| `test/run.bats`     | environment exposure and exit-code propagation      |
-| `test/use.bats`     | registry switching and isolation                    |
-| `test/check.bats`   | every diagnostic `check` emits                      |
-| `test/graph.bats`   | DOT output                                          |
-| `test/wrapper.bats` | the nix-packaged binary's argv handling             |
-
-`CARBON_BIN` selects the carbon under test, so the same suite covers both the
-script and the packaged wrapper:
-
-```sh
-CARBON_BIN=$(nix build .#carbon --no-link --print-out-paths)/bin/carbon bats test/
-```
-
-`test/wrapper.bats` is skipped unless `CARBON_TEST_WRAPPER=1`, since it builds
-the package itself. `nix flake check` runs everything else in a sandbox.
+`CARBON_BIN` selects the binary under test, so the same suite covers the script
+and the packaged wrapper. `test/wrapper.bats` is skipped unless
+`CARBON_TEST_WRAPPER=1`, since it builds the package; `nix flake check` runs
+everything else in a sandbox.
 
 ## Future Work
 I do not intend to build this out further, but if I were these ideas would guide me.
@@ -212,3 +192,63 @@ I do not intend to build this out further, but if I were these ideas would guide
   allows for per-service access control.
 - *Nushell*: Nushell is great for hacking, but the error messages are unfamiliar to the
   uninitiated.
+
+## FAQ
+
+### How do I bootstrap a secret the service pushes and pulls itself?
+
+Pull it from yourself with a `default`, and push it back out of the pulled
+file. This is what `carbon init` scaffolds.
+
+```toml
+[pull.password]
+service = "svc"
+[pull.password.default]
+command = "head -c 15 /dev/urandom | base64"
+
+[push.password]
+command = "jq -r .password .environment.json"
+expect_unused = true
+```
+
+Pull first, then push — `push` alone fails, having no `.environment.json` to
+read. Later pulls find the published value and ignore the default, so the
+secret is generated once and every teammate gets that same value.
+
+### How do I bootstrap a secret whose value I already have?
+
+Same shape, but the default reads it from your environment once. It cannot go
+in `value =` (committed) or come from `{{env.*}}` (rejected in push, since push
+resolves only `{{carbon.registry}}`).
+
+```toml
+[pull.api_key.default]
+command = "printenv SEED_API_KEY"
+```
+
+```sh
+read -rs SEED_API_KEY && export SEED_API_KEY
+carbon pull svc && carbon push svc
+unset SEED_API_KEY
+```
+
+Use `printenv`, not `echo $SEED_API_KEY`: the command runs through `sh -c`, so
+an echoed value is re-split and re-expanded. For a true one-off, skip the config
+and write the file push reads: `echo '{"api_key":"..."}' > svc/.environment.json`.
+
+### A teammate cloned the repo and cannot decrypt anything
+
+`carbon request` adds their key as a recipient but cannot grant access. Someone
+who can already decrypt must then run `carbon rekey`. Adding a recipient leaves
+the data key alone; removing one rotates it.
+
+### Why isn't `{{env.VAR}}` substituted in my push?
+
+Push resolves only `{{carbon.registry}}`, so `check` rejects env references
+rather than publishing them literally. Use `[derive]`, which resolves them from
+your shell at pull time and fails if the variable is unset.
+
+### Can a derive reference another derive?
+
+No. Derives see pulls, environment variables and `{{carbon.registry}}` only;
+`{{derive.other}}` is left verbatim.
