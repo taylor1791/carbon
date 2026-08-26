@@ -41,6 +41,10 @@ All notable changes to carbon are documented here. The format is based on
   string rather than an interpolated one.
 - `run` reported "Command ($command) returned no output" literally, referencing
   a variable that was never in scope.
+- `run` shelled out to a bare `nu`, which the packaged wrapper does not put on
+  PATH: `carbon run` failed with "Command `nu` not found" for anyone who
+  installed carbon from the flake without a nushell of their own. It now runs
+  the nushell already interpreting carbon.
 - `use` reported "The service (FIXME) does not support changing registry"
   instead of naming the service.
 - Registry arguments were impossible to pass from a shell: nushell passes
