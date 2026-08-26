@@ -163,6 +163,47 @@ carbon pull .carbon/my-service
 carbon run --service .carbon/my-service -c "my-app --serve"
 ```
 
+## Tests
+
+The suite is [bats](https://bats-core.readthedocs.io/), split into a unit tier
+that calls carbon's internal functions directly and a CLI tier that drives the
+real binary against sops-encrypted registries.
+
+```sh
+nix develop           # or: nix-shell
+bats --jobs 8 test/   # ~25s
+bats test/check.bats  # one file
+bats --filter derive test/   # one topic
+```
+
+Every test runs in its own `$BATS_TEST_TMPDIR` containing a throwaway git repo,
+because carbon resolves all of its paths from `git rev-parse --show-toplevel`.
+Nothing touches the repository you are working in.
+
+| Path                | Covers                                              |
+|---------------------|-----------------------------------------------------|
+| `test/helper.bash`  | fixtures and assertions shared by every file        |
+| `test/unit.bats`    | `template`, `find_expression`, `resolve`, `execute`, `config_path`, `find`, `detect_cycles` |
+| `test/init.bats`    | key bootstrap, gitignore handling, service scaffolding |
+| `test/access.bats`  | `request`, `rekey`, `view`, `read`, and who can decrypt |
+| `test/push.bats`    | value, command, shell, and registry-pattern resolution |
+| `test/pull.bats`    | dependency resolution, defaults, and `[derive]`     |
+| `test/run.bats`     | environment exposure and exit-code propagation      |
+| `test/use.bats`     | registry switching and isolation                    |
+| `test/check.bats`   | every diagnostic `check` emits                      |
+| `test/graph.bats`   | DOT output                                          |
+| `test/wrapper.bats` | the nix-packaged binary's argv handling             |
+
+`CARBON_BIN` selects the carbon under test, so the same suite covers both the
+script and the packaged wrapper:
+
+```sh
+CARBON_BIN=$(nix build .#carbon --no-link --print-out-paths)/bin/carbon bats test/
+```
+
+`test/wrapper.bats` is skipped unless `CARBON_TEST_WRAPPER=1`, since it builds
+the package itself. `nix flake check` runs everything else in a sandbox.
+
 ## Future Work
 I do not intend to build this out further, but if I were these ideas would guide me.
 
