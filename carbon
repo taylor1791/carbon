@@ -6,6 +6,7 @@ let name = "carbon"
 let version = "0.0.3"
 let git_root = git rev-parse --show-toplevel
 let config_dir_name = $".($name)"
+let config_dir = ($git_root | path join $config_dir_name)
 let service_config_name = $"($name).toml"
 let relative_private_key = ($config_dir_name | path join "private-key.age")
 let private_key_file = ($git_root | path join $relative_private_key)
@@ -204,9 +205,9 @@ def "main request" [
   --only-if-created # Only add the user's key if the config file was created.
 ]: nothing -> nothing {
   let registries = if ($registries | is-empty) { [""] } else { $registries }
-  if not ($config_dir_name | path exists) {
+  if not ($config_dir | path exists) {
     log debug "Creating config directory..."
-    mkdir $config_dir_name
+    mkdir $config_dir
   }
 
   if not ($private_key_file | path exists) {
@@ -601,7 +602,7 @@ def config_path [
     ""
   }
 
-  $git_root | path join $config_dir_name | path join $"($file.stem)($suffix).($file.extension)"
+  $config_dir | path join $"($file.stem)($suffix).($file.extension)"
 }
 
 def template [

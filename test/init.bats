@@ -133,3 +133,32 @@ TOML
   assert_failure
   assert_file_not_exist .carbon/registry.dev.yaml
 }
+
+@test "init works from a subdirectory of the repo" {
+  bare_repo
+  mkdir -p sub
+  cd sub
+  run ../carbon init
+  assert_success
+  assert_file_exist "$BATS_TEST_TMPDIR/.carbon/private-key.age"
+  assert_file_exist "$BATS_TEST_TMPDIR/.carbon/registry.yaml"
+  assert_dir_not_exist .carbon
+}
+
+@test "init from a subdirectory scaffolds services relative to the git root" {
+  bare_repo
+  mkdir -p sub
+  cd sub
+  ../carbon init svc-a
+  assert_file_exist "$BATS_TEST_TMPDIR/svc-a/carbon.toml"
+}
+
+@test "request works from a subdirectory of the repo" {
+  carbon_repo alice
+  mkdir -p sub
+  cd sub
+  run ../carbon request dev
+  assert_success
+  assert_file_exist "$BATS_TEST_TMPDIR/.carbon/sops.dev.yaml"
+  assert_dir_not_exist .carbon
+}
