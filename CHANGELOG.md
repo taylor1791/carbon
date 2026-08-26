@@ -36,6 +36,13 @@ All notable changes to carbon are documented here. The format is based on
 
 ### Fixed
 
+- `find_expression` printed `($name)` and `($registry)` literally when two
+  `registry_pattern` entries matched the same registry: the message was a plain
+  string rather than an interpolated one.
+- `run` reported "Command ($command) returned no output" literally, referencing
+  a variable that was never in scope.
+- `use` reported "The service (FIXME) does not support changing registry"
+  instead of naming the service.
 - Registry arguments were impossible to pass from a shell: nushell passes
   script arguments as strings, so flags typed `list<string>` could never be
   satisfied — `carbon init -r "[dev]"` always failed to parse. Positional rest

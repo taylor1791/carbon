@@ -182,7 +182,7 @@ def "main use" [
 
   if not ('use' in ($service_config | get registry? | default {})) {
     error make -u {
-      msg: $"The service ("FIXME") does not support changing registry."
+      msg: $"The service ($service_config.name) does not support changing registry."
     }
   }
 
@@ -527,7 +527,7 @@ def find_expression [
     }),
     1 => ($matched | first),
     _ => (error make -u {
-      msg: "$Multiple matching registry patterns for attribute ($name) in registry ($registry)."
+      msg: $"Multiple matching registry patterns for attribute ($name) in registry ($registry)."
     })
   }
 }
@@ -562,7 +562,7 @@ def run [
 
   if $output == "" or $output == null {
     error make -u {
-      msg: "Command ($command) returned no output."
+      msg: $"Command ($exec.command) returned no output."
     }
   }
 
