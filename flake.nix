@@ -15,6 +15,8 @@
       pkgs = nixpkgs.legacyPackages.${system};
     in pkgs.mkShell {
       buildInputs = [
+        pkgs.git
+        pkgs.rage
         pkgs.sops
         pkgs.nushell
       ];
