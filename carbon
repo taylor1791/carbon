@@ -3,7 +3,7 @@
 use std/log
 
 let name = "carbon"
-let version = "0.0.2"
+let version = "0.0.3"
 let git_root = git rev-parse --show-toplevel
 let config_dir_name = $".($name)"
 let service_config_name = $"($name).toml"
@@ -26,19 +26,18 @@ def main []: nothing -> nothing {
   help main
 }
 
-# Bootstraps registries and initializes services.
+# Bootstraps the user's key and initializes services.
 #
 # Performs the following actions:
 #  1. Creates a private key for the user if one does not exist.
 #  2. Ensures that private key are ignored by git.
-#  3. Creates the specified registries and adds the user's public key to the registry if
-#     they do not exist.
-#  4. Creates a carbon.toml file for the service if provided and one does not exist.
+#  3. Ensures the default registry exists and the user has requested access to it.
+#  4. Creates a carbon.toml file for each provided service if one does not exist.
+#
+# Named registries are created with `carbon request`.
 def "main init" [
-  service?: string # The path of the service to initialize relative to the git root.
-  --registries (-r): any = [""] # Initializes these registries if necessary. Accepts a list, a "[dev, prd]" list literal, or a single name "dev".
+  ...services: string # The paths of the services to initialize relative to the git root.
 ]: nothing -> nothing {
-  let registries = parse_registries $registries
   let ignore = ($git_root | path join .gitignore)
   if not ($ignore | path exists) {
     touch $ignore
@@ -50,42 +49,40 @@ def "main init" [
     $"\n($ignore_content)" | save $ignore --append
   }
 
-  main request --registries $registries --only-if-created
+  main request --only-if-created
 
-  for $r in $registries {
-    read_sops_config $r
+  if ($services | is-empty) {
+    log debug "No services provided. Skipping service initialization."
   }
 
-  if $service == null {
-    log debug "No service provided. Skipping service initialization."
-    return
-  }
-  let service_path = ($git_root | path join $service)
-  if not ($service_path | path exists) {
-    log debug "Creating service directory..."
-    mkdir $service_path
-  }
+  for $service in $services {
+    let service_path = ($git_root | path join $service)
+    if not ($service_path | path exists) {
+      log debug "Creating service directory..."
+      mkdir $service_path
+    }
 
-  let service_config_name = $service_path | path join $service_config_name
-  let service_config_path = $git_root | path join $service_config_name
-  if not ($service_config_path | path exists) {
-    log debug $"Creating ($service_config_name)"
-    {
-      name: $service
-      pull: {
-        password: {
-          service: $service
-          default: {
-            command: "cat /dev/random | tr -dc 'A-Za-z0-9' | head -c 20"
+    let service_config_name = $service_path | path join $service_config_name
+    let service_config_path = $git_root | path join $service_config_name
+    if not ($service_config_path | path exists) {
+      log debug $"Creating ($service_config_name)"
+      {
+        name: $service
+        pull: {
+          password: {
+            service: $service
+            default: {
+              command: "cat /dev/random | tr -dc 'A-Za-z0-9' | head -c 20"
+            }
           }
         }
-      }
-      push: {
-        password: {
-          command: "cat .environment.json | jq -r '.password'"
+        push: {
+          password: {
+            command: "cat .environment.json | jq -r '.password'"
+          }
         }
-      }
-    } | save $service_config_path
+      } | save $service_config_path
+    }
   }
 }
 
@@ -196,16 +193,17 @@ def "main use" [
   execute ($service_config | get registry.use) $working_dir $variables
 }
 
-# Request access to a registry.
+# Request access to registries.
 #
-# Adds the user's public key to the registry for the provided registries, but does not
+# Creates each registry if necessary and adds the user's public key to it, but does not
 # allow the user to decrypt the registry. The user must be granted access by another
-# user who has access to the registry by running the `rekey` command.
+# user who has access to the registry by running the `rekey` command. Requesting is
+# idempotent: a key that is already a recipient is not added again.
 def "main request" [
-  --registries (-r): any = [""] # The registries of which to request access. Accepts a list, a "[dev, prd]" list literal, or a single name "dev".
+  ...registries: string # The registries of which to request access. Defaults to the default registry.
   --only-if-created # Only add the user's key if the config file was created.
 ]: nothing -> nothing {
-  let registries = parse_registries $registries
+  let registries = if ($registries | is-empty) { [""] } else { $registries }
   if not ($config_dir_name | path exists) {
     log debug "Creating config directory..."
     mkdir $config_dir_name
@@ -251,6 +249,8 @@ def "main request" [
         $updated_config | save -f $sops_config_file
       }
     }
+
+    read_sops_config $r
   }
 }
 
@@ -262,9 +262,9 @@ def "main request" [
 # were removed). Registries can only be updated by another user who has already been
 # granted access.
 def "main rekey" [
-  --registries (-r): any = [""] # The registries which to rekey. Accepts a list, a "[dev, prd]" list literal, or a single name "dev".
+  ...registries: string # The registries which to rekey. Defaults to the default registry.
 ]: nothing -> nothing {
-  let registries = parse_registries $registries
+  let registries = if ($registries | is-empty) { [""] } else { $registries }
   for r in $registries {
     let sops = read_sops_config $r
 
@@ -390,33 +390,6 @@ def "main graph" []: nothing -> nothing {
 
   $lines = ($lines | append "}")
   print ($lines | str join "\n")
-}
-
-# Normalizes a --registries flag value. Nushell re-quotes command-line arguments
-# to scripts, so from a shell the flag arrives as a string; from nushell it can
-# be a real list. A string is parsed as a nushell list literal ("[dev, prd]",
-# via nuon, which is data-only) or taken as a single registry name. An empty
-# value means the default (unnamed) registry.
-def parse_registries [
-  registries: any
-] {
-  let parsed = match ($registries | describe) {
-    $type if ($type | str starts-with "list") => $registries
-    "string" if ($registries | str trim | str starts-with "[") => ($registries | from nuon)
-    "string" => {
-      let name = $registries | str trim
-      if $name =~ '[,\s\]]' {
-        error make -u {
-          msg: $"Cannot parse --registries value ($registries). Multiple registries use list syntax: [dev, prd]"
-        }
-      }
-      [$name]
-    }
-    $type => (error make -u { msg: $"--registries must be a list or a string, got ($type)" })
-  }
-
-  let names = $parsed | each {|r| $r | into string | str trim } | where {|r| $r != "" }
-  if ($names | is-empty) { [""] } else { $names }
 }
 
 def read_working_dir [
