@@ -11,4 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16
-      - run: nix develop --command nu ./test.nu
+
+      # Runs the unit and CLI tiers in a sandbox.
+      - run: nix flake check --print-build-logs
+
+      # The wrapper tier builds the package, which cannot happen inside the
+      # sandbox above, so it runs here against the built binary.
+      - run: nix develop --command bats --jobs 4 test/wrapper.bats
+        env:
+          CARBON_TEST_WRAPPER: "1"
