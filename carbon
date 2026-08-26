@@ -345,6 +345,7 @@ def "main check" []: nothing -> nothing {
     (check_circular_dependency $services)
     (check_unused_push_key $services)
     (check_derive_pull_collision $services)
+    (check_name_case_collision $services)
     (check_derive_references $services)
     (check_push_env_references $services)
   ]
@@ -788,6 +789,38 @@ def check_derive_pull_collision [services: list] {
         $errors = $errors + 1
         print $"(ansi red_bold)error(ansi reset): derive/pull name collision"
         print $"  ($svc.path) has both a pull and derive named \"($derive_key)\""
+      }
+    }
+  }
+  { errors: $errors, warnings: 0 }
+}
+
+# Checks that no two resolved names for a service differ only by case.
+#
+# nushell's environment is case-insensitive, so `run` exports names that differ
+# only by case as a single variable, spelled the way the first one was. The last
+# value wins under a name the others never asked for, and an external command
+# looking for one of the losing spellings finds nothing. Bridging a lowercase
+# pull to an uppercase derive is the tempting mistake this catches.
+def check_name_case_collision [services: list] {
+  mut errors = 0
+  for svc in $services {
+    let names = $svc.pulls | each {|p| $p.local_name } | append $svc.derives
+    let grouped = $names | reduce -f {} {|name, acc|
+      let key = $name | str downcase
+      let prior = if $key in $acc { $acc | get $key } else { [] }
+      $acc | upsert $key ($prior | append $name)
+    }
+
+    for key in ($grouped | columns) {
+      # An exact duplicate is a pull and a derive sharing one name, which
+      # check_derive_pull_collision already reports.
+      let spellings = $grouped | get $key | uniq
+      if ($spellings | length) > 1 {
+        $errors = $errors + 1
+        let quoted = $spellings | each {|n| $'"($n)"' } | str join " and "
+        print $"(ansi red_bold)error(ansi reset): name case collision"
+        print $"  ($svc.path) resolves ($quoted), which run exports as one variable named \"($spellings | first)\""
       }
     }
   }

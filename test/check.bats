@@ -320,6 +320,100 @@ TOML
   assert_output --partial "nope"
 }
 
+# --- name case collisions ---------------------------------------------------
+
+@test "check reports a derive that differs from a pull only by case" {
+  service consumer <<'TOML'
+[pull.aws_access_key_id]
+service = "producer"
+name = "aws_access_key_id"
+[derive.AWS_ACCESS_KEY_ID]
+value = "{{pull.aws_access_key_id}}"
+TOML
+  service producer <<'TOML'
+[push.aws_access_key_id]
+value = "AKIA"
+TOML
+  run ./carbon check
+  assert_failure
+  assert_output --partial "name case collision"
+  assert_output --partial "aws_access_key_id"
+  assert_output --partial "AWS_ACCESS_KEY_ID"
+}
+
+@test "check names the spelling that survives the collision" {
+  service consumer <<'TOML'
+[pull.token]
+service = "producer"
+name = "token"
+[derive.TOKEN]
+value = "{{pull.token}}"
+TOML
+  service producer <<'TOML'
+[push.token]
+value = "t"
+TOML
+  run ./carbon check
+  assert_failure
+  assert_output --partial 'one variable named "token"'
+}
+
+@test "check reports two pulls that differ only by case" {
+  service consumer <<'TOML'
+[pull.url]
+service = "producer"
+name = "url"
+[pull.URL]
+service = "producer"
+name = "url"
+TOML
+  service producer <<'TOML'
+[push.url]
+value = "example.com"
+TOML
+  run ./carbon check
+  assert_failure
+  assert_output --partial "name case collision"
+}
+
+@test "check passes names that differ by more than case" {
+  service consumer <<'TOML'
+[pull.url]
+service = "producer"
+name = "url"
+[derive.URL_BASE]
+value = "https://{{pull.url}}"
+TOML
+  service producer <<'TOML'
+[push.url]
+value = "example.com"
+TOML
+  run ./carbon check
+  assert_success
+}
+
+# An identically named pull and derive is a different mistake, already reported
+# by its own check. Reporting it twice would send the reader looking for a
+# casing difference that is not there.
+@test "check does not report an exact derive/pull collision as a case collision" {
+  service consumer <<'TOML'
+[pull.url]
+service = "producer"
+name = "url"
+[derive.url]
+value = "https://{{pull.url}}/api"
+TOML
+  service producer <<'TOML'
+[push.url]
+value = "example.com"
+TOML
+  run ./carbon check
+  assert_failure
+  assert_output --partial "derive/pull name collision"
+  refute_output --partial "name case collision"
+}
+
+
 # --- env references in push -------------------------------------------------
 
 @test "check reports {{env}} in a push value" {

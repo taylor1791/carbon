@@ -248,6 +248,14 @@ Push resolves only `{{carbon.registry}}`, so `check` rejects env references
 rather than publishing them literally. Use `[derive]`, which resolves them from
 your shell at pull time and fails if the variable is unset.
 
+### My uppercase derive doesn't reach the command
+
+nushell's environment is case-insensitive, so `run` cannot export
+`aws_access_key_id` and `AWS_ACCESS_KEY_ID` as two variables. It exports one,
+spelled the way the first of them was resolved — pulls before derives — and a
+case-sensitive consumer such as terraform sees nothing under the name it wants.
+`check` reports this as a name case collision.
+
 ### Can a derive reference another derive?
 
 No. Derives see pulls, environment variables and `{{carbon.registry}}` only;
