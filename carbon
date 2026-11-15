@@ -548,7 +548,7 @@ def resolve [
   }
 
   if 'command' in $record {
-    return (run $record $working_dir $variables)
+    return (run_command $record $working_dir $variables)
   }
 
   error make -u {
@@ -557,7 +557,7 @@ def resolve [
   }
 }
 
-def run [
+def run_command [
   exec: record<
     command: string
   >
@@ -811,7 +811,7 @@ def check_name_case_collision [services: list] {
   for svc in $services {
     let names = $svc.pulls | each {|p| $p.local_name } | append $svc.derives
     let grouped = $names | reduce -f {} {|name, acc|
-      let key = $name | str downcase
+      let key = $name | str lowercase
       let prior = if $key in $acc { $acc | get $key } else { [] }
       $acc | upsert $key ($prior | append $name)
     }

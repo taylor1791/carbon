@@ -48,6 +48,9 @@ All notable changes to carbon are documented here. The format is based on
 - The packaged wrapper did not put git on PATH, yet every command runs
   `git rev-parse` to find the repository root, so carbon failed outright for
   anyone without git of their own. The wrapper now supplies it.
+- A service named like a nushell literal, such as `inf`, could not be passed
+  as an argument: the packaged wrapper shipped nushell 0.103, which parsed it
+  as a float. It now ships nushell 0.116, which passes argv as strings.
 - `use` reported "The service (FIXME) does not support changing registry"
   instead of naming the service.
 - Registry arguments were impossible to pass from a shell: nushell passes

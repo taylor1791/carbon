@@ -100,3 +100,15 @@ TOML
   assert_success
   assert_output "https://example.com"
 }
+
+@test "wrapper reads a service named like a nushell literal" {
+  carbon_repo
+  service inf <<'TOML'
+[push.greeting]
+value = "hello"
+TOML
+  ./carbon push inf
+  run ./carbon read inf greeting
+  assert_success
+  assert_output "hello"
+}

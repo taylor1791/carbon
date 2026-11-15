@@ -154,8 +154,8 @@ setup() {
   assert_output "found me"
 }
 
-@test "run errors when the command produces no output" {
-  run carbon_call run '{"command":"true"}' '"."' '{}'
+@test "run_command errors when the command produces no output" {
+  run carbon_call run_command '{"command":"true"}' '"."' '{}'
   assert_failure
   assert_message "Command true returned no output"
 }
