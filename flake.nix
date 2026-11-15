@@ -90,7 +90,7 @@
         in pkgs.writeScriptBin "carbon" ''
           #!${pkgs.bash}/bin/bash
 
-          export PATH="${pkgs.sops}/bin:${pkgs.rage}/bin:$PATH"
+          export PATH="${lib.makeBinPath [ pkgs.git pkgs.rage pkgs.sops ]}:$PATH"
 
           exec ${pkgs.nushell}/bin/nu ${carbonScript}/bin/carbon "$@"
         '';

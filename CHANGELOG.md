@@ -45,6 +45,9 @@ All notable changes to carbon are documented here. The format is based on
   PATH: `carbon run` failed with "Command `nu` not found" for anyone who
   installed carbon from the flake without a nushell of their own. It now runs
   the nushell already interpreting carbon.
+- The packaged wrapper did not put git on PATH, yet every command runs
+  `git rev-parse` to find the repository root, so carbon failed outright for
+  anyone without git of their own. The wrapper now supplies it.
 - `use` reported "The service (FIXME) does not support changing registry"
   instead of naming the service.
 - Registry arguments were impossible to pass from a shell: nushell passes

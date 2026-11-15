@@ -164,16 +164,18 @@ install_carbon() {
   fi
 }
 
-# Echoes $PATH with every entry that provides `nu` removed.
+# Echoes $PATH with every entry that provides any of the named commands removed.
 #
-# The packaged wrapper carries its own nushell, so nothing it does may depend
-# on the caller having one. Tests use this to run it the way an installed user
+# The packaged wrapper carries its own tools, so nothing it does may depend on
+# the caller having them. Tests use this to run it the way an installed user
 # would.
-path_without_nu() {
-  local dir out=
+path_without() {
+  local dir cmd out=
   local IFS=:
   for dir in $PATH; do
-    [ -x "$dir/nu" ] && continue
+    for cmd in "$@"; do
+      [ -x "$dir/$cmd" ] && continue 2
+    done
     out="${out:+$out:}$dir"
   done
   printf '%s' "$out"

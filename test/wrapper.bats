@@ -84,7 +84,19 @@ TOML
 [derive.greeting]
 value = "hello"
 TOML
-  run env PATH="$(path_without_nu)" ./carbon run -s svc -c "printenv greeting"
+  run env PATH="$(path_without nu)" ./carbon run -s svc -c "printenv greeting"
   assert_success
   assert_output "hello"
+}
+
+@test "wrapper reads a value without git on the caller's PATH" {
+  carbon_repo
+  service svc <<'TOML'
+[push.url]
+value = "https://example.com"
+TOML
+  ./carbon push svc
+  run env PATH="$(path_without git)" ./carbon read svc url
+  assert_success
+  assert_output "https://example.com"
 }
